@@ -1,10 +1,15 @@
-import { StrictMode } from 'react'
+import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import App from './App.tsx'
+
+const isAdmin = window.location.pathname.startsWith('/admin');
+
+const App = lazy(() => isAdmin ? import('./AdminApp') : import('./App'));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <Suspense fallback={null}>
+      <App />
+    </Suspense>
   </StrictMode>,
 )

@@ -15,3 +15,33 @@ export interface Message {
   sender: 'ceo' | 'user' | 'system';
   timestamp?: string;
 }
+
+// Admin types
+
+export interface AdminConversation {
+  id: string;
+  user_id: string;
+  external_id: string;
+  email: string | null;
+  rating: number | null;
+  status: 'active' | 'closed' | 'ticket_opened';
+  message_count: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminMessage {
+  id: string;
+  conversation_id: string;
+  sender: 'user' | 'ceo' | 'system';
+  text: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface CeoNote {
+  id: string;
+  conversation_id: string;
+  text: string;
+  created_at: string;
+}

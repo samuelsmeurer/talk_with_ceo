@@ -86,6 +86,45 @@ interface CeoNoteRow {
   created_at: string;
 }
 
+interface MessageRow {
+  id: string;
+  conversation_id: string;
+  sender: string;
+  text: string;
+  metadata: unknown;
+  created_at: string;
+}
+
+// GET /api/admin/conversations/:id/messages — list messages for a conversation
+router.get('/conversations/:id/messages', adminAuth, async (req, res) => {
+  const conversationId = req.params.id;
+
+  const result = await query<MessageRow>(
+    `SELECT id, conversation_id, sender, text, metadata, created_at
+     FROM messages
+     WHERE conversation_id = $1
+     ORDER BY created_at ASC`,
+    [conversationId],
+  );
+
+  res.status(200).json(result.rows);
+});
+
+// GET /api/admin/conversations/:id/notes — list notes for a conversation
+router.get('/conversations/:id/notes', adminAuth, async (req, res) => {
+  const conversationId = req.params.id;
+
+  const result = await query<CeoNoteRow>(
+    `SELECT id, conversation_id, text, created_at
+     FROM ceo_notes
+     WHERE conversation_id = $1
+     ORDER BY created_at ASC`,
+    [conversationId],
+  );
+
+  res.status(200).json(result.rows);
+});
+
 // POST /api/admin/conversations/:id/notes — CEO adds a comment
 router.post('/conversations/:id/notes', adminAuth, async (req, res) => {
   const conversationId = req.params.id;
