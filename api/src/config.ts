@@ -14,4 +14,7 @@ export const config = {
   jwtSecret: required('JWT_SECRET'),
   port: parseInt(process.env['PORT'] ?? '3001', 10),
   corsOrigin: process.env['CORS_ORIGIN'] ?? 'http://localhost:5173',
+  redashBaseUrl: process.env['REDASH_BASE_URL'] ?? 'https://reports.eldorado.io',
+  redashApiKey: process.env['REDASH_API_KEY'] ?? '',
+  redashUserQueryId: process.env['REDASH_USER_QUERY_ID'] ?? '1464',
 } as const;
