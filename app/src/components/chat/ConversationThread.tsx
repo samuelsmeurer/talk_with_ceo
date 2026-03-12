@@ -4,11 +4,11 @@ import { ChatBubble } from './ChatBubble';
 import { VideoBubble } from './VideoBubble';
 import { TypingIndicator } from './TypingIndicator';
 import { ChatWallpaper } from './ChatWallpaper';
-import { CEO_MESSAGES } from '../../constants';
 import { useStore } from '../../store';
 import type { Message } from '../../types';
 
 interface ConversationThreadProps {
+  ceoMessages: Message[];
   visibleCount: number;
   isTyping: boolean;
   confirmationMessage?: Message | null;
@@ -16,6 +16,7 @@ interface ConversationThreadProps {
 }
 
 export function ConversationThread({
+  ceoMessages,
   visibleCount,
   isTyping,
   confirmationMessage,
@@ -56,7 +57,7 @@ export function ConversationThread({
 
         {/* CEO Text Messages (after video) */}
         <AnimatePresence>
-          {CEO_MESSAGES.slice(0, textBubbleCount).map((msg) => (
+          {ceoMessages.slice(0, textBubbleCount).map((msg) => (
             <ChatBubble
               key={msg.id}
               text={msg.text}

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useStore } from '../store';
 import { createOrIdentifyUser } from '../api/client';
+import type { EngagementResult } from '../api/client';
 
 const USER_ID_KEY = 'ceo-chat-user-id';
 const USER_NAME_KEY = 'ceo-chat-user-name';
@@ -24,6 +25,7 @@ function getStoredUserName(): string | null {
 export function useUserIdentification() {
   const [userId, setUserId] = useState<string | null>(getStoredUserId);
   const [userName, setUserName] = useState<string | null>(getStoredUserName);
+  const [engagement, setEngagement] = useState<EngagementResult | null>(null);
   const storeSetUserId = useStore((s) => s.setUserId);
   const storeSetUserName = useStore((s) => s.setUserName);
 
@@ -35,6 +37,9 @@ export function useUserIdentification() {
       try {
         const user = await createOrIdentifyUser(name);
         id = user.id;
+        if (user.engagement) {
+          setEngagement(user.engagement);
+        }
       } catch {
         id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       }
@@ -56,5 +61,5 @@ export function useUserIdentification() {
     [storeSetUserId, storeSetUserName]
   );
 
-  return { userId, userName, isIdentified, identify };
+  return { userId, userName, isIdentified, identify, engagement };
 }

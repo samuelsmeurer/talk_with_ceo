@@ -12,8 +12,28 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export interface EngagementResult {
+  flow: 'inactive' | 'warmup' | 'vip' | 'regular';
+  message: string;
+  firstName: string | null;
+  metrics: {
+    vol_total: number;
+    tx_total: number;
+    rank_vol_total: number;
+    rank_tx_total: number;
+  };
+}
+
+export interface UserResponse {
+  id: string;
+  external_id: string;
+  email: string | null;
+  first_name: string | null;
+  engagement: EngagementResult | null;
+}
+
 export function createOrIdentifyUser(externalId: string, email?: string) {
-  return request<{ id: string; external_id: string; email: string | null }>(
+  return request<UserResponse>(
     '/api/users',
     {
       method: 'POST',

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { StatusBar } from './components/layout/StatusBar';
 import { ConversationThread } from './components/chat/ConversationThread';
@@ -19,7 +19,7 @@ import type { Message } from './types';
 
 export default function App() {
   const { isFirstVisit, markVisited } = useFirstVisit();
-  const { userId, isIdentified, identify } = useUserIdentification();
+  const { userId, isIdentified, identify, engagement } = useUserIdentification();
 
   const [showSplash, setShowSplash] = useState(isFirstVisit);
   const [showUsernamePopup, setShowUsernamePopup] = useState(!isIdentified);
@@ -44,8 +44,18 @@ export default function App() {
     }
   }, [userId, setUserId]);
 
+  // Build CEO messages — replace the 3rd bubble with engagement message if available
+  const ceoMessages = useMemo(() => {
+    if (!engagement?.message) return CEO_MESSAGES;
+    return [
+      CEO_MESSAGES[0],
+      CEO_MESSAGES[1],
+      { id: 'ceo-3', text: engagement.message, sender: 'ceo' as const },
+    ];
+  }, [engagement]);
+
   // 1 (video) + 3 (text messages) = 4 total items in sequence
-  const totalSequenceItems = 1 + CEO_MESSAGES.length;
+  const totalSequenceItems = 1 + ceoMessages.length;
 
   const { visibleCount, isTyping, sequenceComplete } = useTypingSequence(
     totalSequenceItems,
@@ -202,6 +212,7 @@ export default function App() {
         <StatusBar />
 
         <ConversationThread
+          ceoMessages={ceoMessages}
           visibleCount={visibleCount}
           isTyping={isTyping}
           confirmationMessage={confirmationMessage}
