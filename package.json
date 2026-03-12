@@ -1,0 +1,10 @@
+{
+  "name": "talk-with-ceo",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:app && npm run build:api",
+    "build:app": "cd app && npm install && npm run build",
+    "build:api": "cd api && npm install && npm run build",
+    "start": "cd api && node dist/index.js"
+  }
+}
