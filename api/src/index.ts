@@ -24,6 +24,17 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// DB debug (temporary)
+app.get('/api/debug/db', async (_req, res) => {
+  try {
+    const { pool } = await import('./db/client.js');
+    const result = await pool.query('SELECT 1 AS ok');
+    res.json({ connected: true, result: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ connected: false, error: String(err), dbUrl: config.databaseUrl.replace(/:[^:@]+@/, ':***@') });
+  }
+});
+
 // API Routes
 app.use('/api/users', usersRouter);
 app.use('/api/conversations', conversationsRouter);
