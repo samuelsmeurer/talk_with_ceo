@@ -5,6 +5,9 @@ const { Pool } = pg;
 
 export const pool = new Pool({
   connectionString: config.databaseUrl,
+  ssl: config.databaseUrl.includes('localhost')
+    ? false
+    : { rejectUnauthorized: false },
 });
 
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
