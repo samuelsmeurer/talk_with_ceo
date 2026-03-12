@@ -3,7 +3,7 @@ import { AvatarCircle } from './AvatarCircle';
 
 interface ChatBubbleProps {
   text: string;
-  sender: 'ceo' | 'user';
+  sender: 'ceo' | 'user' | 'system';
   showAvatar?: boolean;
   animate?: boolean;
 }
