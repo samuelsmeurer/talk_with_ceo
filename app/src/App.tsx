@@ -82,7 +82,7 @@ export default function App() {
     setShowSplash(false);
     markVisited();
     if (isIdentified) {
-      setTimeout(() => setChatStarted(true), 300);
+      setTimeout(() => setChatStarted(true), 2000);
     }
   }, [markVisited, isIdentified]);
 
@@ -90,7 +90,7 @@ export default function App() {
     (_userId: string) => {
       setShowUsernamePopup(false);
       if (!showSplash) {
-        setTimeout(() => setChatStarted(true), 300);
+        setTimeout(() => setChatStarted(true), 2000);
       }
     },
     [showSplash]
@@ -99,7 +99,7 @@ export default function App() {
   // When splash finishes and user is now identified, start chat
   useEffect(() => {
     if (!showSplash && !showUsernamePopup && !chatStarted) {
-      setTimeout(() => setChatStarted(true), 300);
+      setTimeout(() => setChatStarted(true), 2000);
     }
   }, [showSplash, showUsernamePopup, chatStarted]);
 
