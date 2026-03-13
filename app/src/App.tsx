@@ -35,7 +35,6 @@ export default function App() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingMessage, setPendingMessage] = useState('');
   const [showRating, setShowRating] = useState(false);
-  const [complaintDetected, setComplaintDetected] = useState(false);
   const [showSupportConfirmation, setShowSupportConfirmation] = useState(false);
 
   const addMessage = useStore((s) => s.addMessage);
@@ -161,8 +160,6 @@ export default function App() {
     } catch {
       // API failed — use hardcoded fallback
     }
-
-    setComplaintDetected(isComplaint);
 
     setTimeout(() => {
       setConfirmationTyping(true);
