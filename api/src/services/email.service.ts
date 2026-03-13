@@ -1,21 +1,31 @@
 import nodemailer from 'nodemailer';
 import { config } from '../config.js';
 
-const transporter = nodemailer.createTransport({
-  host: config.smtpHost,
-  port: config.smtpPort,
-  secure: config.smtpPort === 465,
-  auth: {
-    user: config.smtpUser,
-    pass: config.smtpPass,
-  },
-});
+const smtpConfigured = !!(config.smtpHost && config.smtpUser && config.smtpPass);
+
+const transporter = smtpConfigured
+  ? nodemailer.createTransport({
+      host: config.smtpHost,
+      port: config.smtpPort,
+      secure: config.smtpPort === 465,
+      auth: {
+        user: config.smtpUser,
+        pass: config.smtpPass,
+      },
+      connectionTimeout: 10000,
+      socketTimeout: 10000,
+    })
+  : null;
 
 export async function sendSupportTicket(
   username: string,
   userEmail: string | null,
   messageText: string,
 ): Promise<void> {
+  if (!transporter) {
+    console.warn('SMTP not configured — skipping support ticket email');
+    return;
+  }
   try {
     await transporter.sendMail({
       from: `Habla con Guille <${config.smtpUser}>`,
@@ -41,6 +51,10 @@ export async function sendUserConfirmation(
   userEmail: string,
   firstName: string,
 ): Promise<void> {
+  if (!transporter) {
+    console.warn('SMTP not configured — skipping user confirmation email');
+    return;
+  }
   try {
     await transporter.sendMail({
       from: `Guillermo - CEO de El Dorado <${config.smtpUser}>`,

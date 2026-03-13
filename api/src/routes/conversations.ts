@@ -76,23 +76,17 @@ router.post('/:id/ticket', async (req, res) => {
   );
   const userMessage = msgResult.rows[0];
 
-  // Send emails (non-blocking — don't fail the request)
-  const emailPromises: Promise<void>[] = [];
-
-  emailPromises.push(
-    sendSupportTicket(
-      user.external_id,
-      user.email,
-      userMessage?.text ?? '',
-    ),
-  );
+  // Send emails (fire-and-forget — don't block the response)
+  sendSupportTicket(
+    user.external_id,
+    user.email,
+    userMessage?.text ?? '',
+  ).catch(() => {});
 
   if (user.email) {
     const firstName = user.first_name || user.external_id;
-    emailPromises.push(sendUserConfirmation(user.email, firstName));
+    sendUserConfirmation(user.email, firstName).catch(() => {});
   }
-
-  await Promise.allSettled(emailPromises);
 
   // Update conversation status
   await query(
