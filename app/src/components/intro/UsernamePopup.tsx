@@ -3,24 +3,18 @@ import { motion } from 'framer-motion';
 
 interface UsernamePopupProps {
   onComplete: (userId: string) => void;
-  identify: (name: string) => Promise<string>;
+  identify: (name: string) => string;
 }
 
 export function UsernamePopup({ onComplete, identify }: UsernamePopupProps) {
   const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     const trimmed = name.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed) return;
 
-    setLoading(true);
-    try {
-      const userId = await identify(trimmed);
-      onComplete(userId);
-    } finally {
-      setLoading(false);
-    }
+    const userId = identify(trimmed);
+    onComplete(userId);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -73,7 +67,7 @@ export function UsernamePopup({ onComplete, identify }: UsernamePopupProps) {
 
         <button
           onClick={handleSubmit}
-          disabled={!name.trim() || loading}
+          disabled={!name.trim()}
           className="w-full rounded-full font-semibold transition-opacity disabled:opacity-40"
           style={{
             backgroundColor: '#FFFF00',
@@ -82,7 +76,7 @@ export function UsernamePopup({ onComplete, identify }: UsernamePopupProps) {
             fontSize: 15,
           }}
         >
-          {loading ? 'Conectando...' : 'Continuar'}
+          Continuar
         </button>
       </motion.div>
     </motion.div>

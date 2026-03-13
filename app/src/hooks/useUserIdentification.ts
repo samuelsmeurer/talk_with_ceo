@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useStore } from '../store';
 import { createOrIdentifyUser } from '../api/client';
 import type { EngagementResult } from '../api/client';
@@ -29,37 +29,82 @@ export function useUserIdentification() {
   const storeSetUserId = useStore((s) => s.setUserId);
   const storeSetUserName = useStore((s) => s.setUserName);
 
+  // Promise ref so handleConfirmSend can await the real userId if needed
+  const apiPromiseRef = useRef<Promise<string> | null>(null);
+
   const isIdentified = userId !== null;
 
+  // Fires the API call and updates state when it responds (non-blocking)
+  const enrichInBackground = useCallback(
+    (name: string) => {
+      const promise = createOrIdentifyUser(name)
+        .then((user) => {
+          // Update with real backend ID
+          setUserId(user.id);
+          storeSetUserId(user.id);
+          try {
+            localStorage.setItem(USER_ID_KEY, user.id);
+          } catch {
+            // storage unavailable
+          }
+
+          if (user.engagement) {
+            setEngagement(user.engagement);
+          }
+
+          return user.id;
+        })
+        .catch(() => {
+          // API unavailable — keep existing ID
+          return userId ?? `local-${Date.now()}`;
+        });
+
+      apiPromiseRef.current = promise;
+      return promise;
+    },
+    [storeSetUserId, userId],
+  );
+
+  // Returning user: fetch engagement in background on mount
+  useEffect(() => {
+    if (!userName || engagement) return;
+    enrichInBackground(userName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userName]);
+
+  // New user: return immediately with temp ID, enrich in background
   const identify = useCallback(
-    async (name: string): Promise<string> => {
-      let id: string;
-      try {
-        const user = await createOrIdentifyUser(name);
-        id = user.id;
-        if (user.engagement) {
-          setEngagement(user.engagement);
-        }
-      } catch {
-        id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      }
+    (name: string): string => {
+      const tempId = `pending-${Date.now()}`;
+
+      // Set state immediately — popup closes, chat starts
+      setUserId(tempId);
+      setUserName(name);
+      storeSetUserId(tempId);
+      storeSetUserName(name);
 
       try {
-        localStorage.setItem(USER_ID_KEY, id);
+        localStorage.setItem(USER_ID_KEY, tempId);
         localStorage.setItem(USER_NAME_KEY, name);
       } catch {
         // storage unavailable
       }
 
-      setUserId(id);
-      setUserName(name);
-      storeSetUserId(id);
-      storeSetUserName(name);
+      // Fire API call in background — updates userId + engagement when ready
+      enrichInBackground(name);
 
-      return id;
+      return tempId;
     },
-    [storeSetUserId, storeSetUserName]
+    [storeSetUserId, storeSetUserName, enrichInBackground],
   );
 
-  return { userId, userName, isIdentified, identify, engagement };
+  // Await the real userId (for when we need it before sending a message)
+  const awaitRealUserId = useCallback(async (): Promise<string> => {
+    if (apiPromiseRef.current) {
+      return apiPromiseRef.current;
+    }
+    return userId ?? '';
+  }, [userId]);
+
+  return { userId, userName, isIdentified, identify, engagement, awaitRealUserId };
 }

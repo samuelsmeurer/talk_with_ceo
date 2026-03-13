@@ -2,23 +2,36 @@ import type { MoodOption, Message } from './types';
 
 export const CEO_NAME = 'Guille';
 
-export const CEO_MESSAGES: Message[] = [
-  {
-    id: 'ceo-1',
-    text: '¡Hola! Soy Guille, el CEO de El Dorado.',
+/** Format a name: first word only, first letter uppercase, rest lowercase */
+export function formatFirstName(name: string): string {
+  const first = name.trim().split(/\s+/)[0] || '';
+  if (!first) return '';
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+/** Build the greeting message (shown before video) */
+export function buildGreetingMessage(name: string): Message {
+  const formatted = formatFirstName(name) || 'crack';
+  return {
+    id: 'ceo-greeting',
+    text: `¡Hola ${formatted}, ¿todo bien? Acá Guillermo, CEO de El Dorado. Grabé algo para vos, te mando un video.`,
     sender: 'ceo',
-  },
-  {
-    id: 'ceo-2',
-    text: 'Creé este espacio para escucharte directamente. Sin filtros, sin intermediarios.',
-    sender: 'ceo',
-  },
-  {
-    id: 'ceo-3',
-    text: 'Contame lo que sea — una idea, algo que te frustró, algo que te gustó, o simplemente lo que tengas ganas de decir.',
-    sender: 'ceo',
-  },
-];
+  };
+}
+
+/** Default engagement message (when Redash data is not available) */
+export const DEFAULT_ENGAGEMENT_MESSAGE: Message = {
+  id: 'ceo-engagement',
+  text: 'Estoy muy contento de hablar con vos. Me importa mucho tu punto de vista.',
+  sender: 'ceo',
+};
+
+/** Final message — always shown last */
+export const CEO_FINAL_MESSAGE: Message = {
+  id: 'ceo-final',
+  text: 'Quiero escucharte personalmente — contame lo que quieras.',
+  sender: 'ceo',
+};
 
 export const MOOD_OPTIONS: MoodOption[] = [
   { type: 'idea', label: 'Tengo una idea', icon: '💡', color: '#FFFF00' },

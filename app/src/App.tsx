@@ -14,12 +14,12 @@ import { useUserIdentification } from './hooks/useUserIdentification';
 import { useStore } from './store';
 import { playReceived, playSent } from './hooks/useSounds';
 import { startConversation, sendMessage, rateConversation } from './api/client';
-import { CEO_MESSAGES, CEO_CONFIRMATION_MESSAGE, TYPING_DELAYS } from './constants';
+import { buildGreetingMessage, DEFAULT_ENGAGEMENT_MESSAGE, CEO_FINAL_MESSAGE, CEO_CONFIRMATION_MESSAGE, TYPING_DELAYS } from './constants';
 import type { Message } from './types';
 
 export default function App() {
   const { isFirstVisit, markVisited } = useFirstVisit();
-  const { userId, isIdentified, identify, engagement } = useUserIdentification();
+  const { userId, userName, isIdentified, identify, engagement, awaitRealUserId } = useUserIdentification();
 
   const [showSplash, setShowSplash] = useState(isFirstVisit);
   const [showUsernamePopup, setShowUsernamePopup] = useState(!isIdentified);
@@ -44,18 +44,18 @@ export default function App() {
     }
   }, [userId, setUserId]);
 
-  // Build CEO messages — replace the 3rd bubble with engagement message if available
+  // Build CEO messages: greeting → [video] → engagement → final
   const ceoMessages = useMemo(() => {
-    if (!engagement?.message) return CEO_MESSAGES;
-    return [
-      CEO_MESSAGES[0],
-      CEO_MESSAGES[1],
-      { id: 'ceo-3', text: engagement.message, sender: 'ceo' as const },
-    ];
-  }, [engagement]);
+    const displayName = engagement?.firstName || userName || '';
+    const greeting = buildGreetingMessage(displayName);
+    const engagementMsg: Message = engagement?.message
+      ? { id: 'ceo-engagement', text: engagement.message, sender: 'ceo' }
+      : DEFAULT_ENGAGEMENT_MESSAGE;
+    return [greeting, engagementMsg, CEO_FINAL_MESSAGE];
+  }, [engagement, userName]);
 
-  // 1 (video) + 3 (text messages) = 4 total items in sequence
-  const totalSequenceItems = 1 + ceoMessages.length;
+  // greeting(text) + video + engagement(text) + final(text) = 4 items
+  const totalSequenceItems = 4;
 
   const { visibleCount, isTyping, sequenceComplete } = useTypingSequence(
     totalSequenceItems,
@@ -138,7 +138,7 @@ export default function App() {
     let ceoResponseText = CEO_CONFIRMATION_MESSAGE;
 
     try {
-      const currentUserId = userId || '';
+      const currentUserId = await awaitRealUserId();
       const conversation = await startConversation(currentUserId);
       conversationIdRef.current = conversation.id;
       setConversationId(conversation.id);
@@ -153,6 +153,8 @@ export default function App() {
       setConfirmationTyping(true);
     }, TYPING_DELAYS.confirmationDelay);
 
+    const confirmAt = TYPING_DELAYS.confirmationDelay + TYPING_DELAYS.typingDuration;
+
     setTimeout(() => {
       setConfirmationTyping(false);
       setConfirmationMessage({
@@ -160,9 +162,12 @@ export default function App() {
         text: ceoResponseText,
         sender: 'ceo',
       });
+    }, confirmAt);
+
+    setTimeout(() => {
       setShowRating(true);
-    }, TYPING_DELAYS.confirmationDelay + TYPING_DELAYS.typingDuration);
-  }, [pendingMessage, addMessage, mood, userId, setConversationId]);
+    }, confirmAt + 3000);
+  }, [pendingMessage, addMessage, mood, awaitRealUserId, setConversationId]);
 
   const handleRate = useCallback(
     async (rating: number) => {

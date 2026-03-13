@@ -5,11 +5,21 @@ CREATE TYPE message_sender AS ENUM ('user', 'ceo', 'system');
 
 CREATE TABLE users (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  external_id TEXT UNIQUE NOT NULL,
-  email       TEXT,
-  first_name  TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  external_id       TEXT UNIQUE NOT NULL,
+  email             TEXT,
+  first_name        TEXT,
+  vol_total         NUMERIC,
+  vol_30d           NUMERIC,
+  tx_total          INTEGER,
+  tx_30d            INTEGER,
+  rank_vol_total    TEXT,
+  rank_vol_30d      TEXT,
+  rank_tx_total     TEXT,
+  rank_tx_30d       TEXT,
+  engagement_flow   TEXT,
+  metrics_updated_at TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE conversations (

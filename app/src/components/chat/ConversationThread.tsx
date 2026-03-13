@@ -34,36 +34,53 @@ export function ConversationThread({
     }
   }, [visibleCount, isTyping, messages.length, confirmationMessage, isConfirmationTyping]);
 
-  // visibleCount: 0 = nothing, 1 = video, 2+ = video + text bubbles
-  const showVideo = visibleCount >= 1;
-  const textBubbleCount = Math.max(0, visibleCount - 1);
-
+  // Sequence: 1=greeting text, 2=video, 3=engagement text, 4=final text
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto relative" style={{ padding: '16px 24px' }}>
       <ChatWallpaper />
 
-      {/* Content above wallpaper */}
       <div className="relative" style={{ zIndex: 1 }}>
-      {/* Timestamp */}
-      {showVideo && (
+      {visibleCount >= 1 && (
         <p className="text-center text-xs text-text-muted mb-4">hace un momento</p>
       )}
 
       <div className="flex flex-col gap-3">
-        {/* Video as first message from Guille */}
+        {/* 1. Greeting text (before video) */}
         <AnimatePresence>
-          {showVideo && <VideoBubble key="video" showAvatar />}
-        </AnimatePresence>
-
-        {/* CEO Text Messages (after video) */}
-        <AnimatePresence>
-          {ceoMessages.slice(0, textBubbleCount).map((msg) => (
+          {visibleCount >= 1 && ceoMessages[0] && (
             <ChatBubble
-              key={msg.id}
-              text={msg.text}
+              key={ceoMessages[0].id}
+              text={ceoMessages[0].text}
               sender="ceo"
             />
-          ))}
+          )}
+        </AnimatePresence>
+
+        {/* 2. Video */}
+        <AnimatePresence>
+          {visibleCount >= 2 && <VideoBubble key="video" showAvatar />}
+        </AnimatePresence>
+
+        {/* 3. Engagement text (after video) */}
+        <AnimatePresence>
+          {visibleCount >= 3 && ceoMessages[1] && (
+            <ChatBubble
+              key={ceoMessages[1].id}
+              text={ceoMessages[1].text}
+              sender="ceo"
+            />
+          )}
+        </AnimatePresence>
+
+        {/* 4. Final message */}
+        <AnimatePresence>
+          {visibleCount >= 4 && ceoMessages[2] && (
+            <ChatBubble
+              key={ceoMessages[2].id}
+              text={ceoMessages[2].text}
+              sender="ceo"
+            />
+          )}
         </AnimatePresence>
 
         {/* Typing indicator */}

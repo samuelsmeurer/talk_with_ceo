@@ -18,9 +18,13 @@ export interface EngagementResult {
   firstName: string | null;
   metrics: {
     vol_total: number;
+    vol_30d: number;
     tx_total: number;
-    rank_vol_total: number;
-    rank_tx_total: number;
+    tx_30d: number;
+    rank_vol_total: string;
+    rank_vol_30d: string;
+    rank_tx_total: string;
+    rank_tx_30d: string;
   };
 }
 

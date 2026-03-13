@@ -40,24 +40,44 @@ router.post('/', async (req, res) => {
     const metrics = await fetchUserMetrics(external_id);
 
     if (metrics) {
-      // Update email and first_name from Redash if available
+      engagement = classifyEngagement(metrics);
+
       const redashEmail = metrics.email || null;
       const redashFirstName = metrics.firstName || null;
 
-      if (redashEmail || redashFirstName) {
-        const updated = await query<UserRow>(
-          `UPDATE users
-           SET email = COALESCE($1, email),
-               first_name = COALESCE($2, first_name),
-               updated_at = now()
-           WHERE id = $3
-           RETURNING id, external_id, email, first_name`,
-          [redashEmail, redashFirstName, user.id],
-        );
-        Object.assign(user, updated.rows[0]);
-      }
-
-      engagement = classifyEngagement(metrics);
+      const updated = await query<UserRow>(
+        `UPDATE users
+         SET email = COALESCE($1, email),
+             first_name = COALESCE($2, first_name),
+             vol_total = $3,
+             vol_30d = $4,
+             tx_total = $5,
+             tx_30d = $6,
+             rank_vol_total = $7,
+             rank_vol_30d = $8,
+             rank_tx_total = $9,
+             rank_tx_30d = $10,
+             engagement_flow = $11,
+             metrics_updated_at = now(),
+             updated_at = now()
+         WHERE id = $12
+         RETURNING id, external_id, email, first_name`,
+        [
+          redashEmail,
+          redashFirstName,
+          metrics.vol_total,
+          metrics.vol_30d,
+          metrics.tx_total,
+          metrics.tx_30d,
+          metrics.rank_vol_total,
+          metrics.rank_vol_30d,
+          metrics.rank_tx_total,
+          metrics.rank_tx_30d,
+          engagement.flow,
+          user.id,
+        ],
+      );
+      Object.assign(user, updated.rows[0]);
     }
   } catch (error) {
     console.warn('[users] Redash enrichment failed:', error instanceof Error ? error.message : error);

@@ -4,71 +4,304 @@ Miniapp for El Dorado (LATAM fintech superapp) that lets users send messages dir
 
 ## Stack
 
+### Frontend
 - **React 19** + **TypeScript 5.9** + **Vite 7**
 - **Tailwind CSS 4** with `@tailwindcss/vite` (uses `@theme` directive for tokens)
 - **Framer Motion 12** for animations (bubbles, springs, transitions)
 - **Zustand 5** for global state management
+- **clsx** for class name composition
 - **@fontsource/inter** (self-hosted)
+
+### Backend
+- **Node.js** + **TypeScript 5.9** + **Express 5**
+- **PostgreSQL** (`pg` 8.13) with connection pooling
+- **JWT** (`jsonwebtoken` 9.0) for admin authentication
+- **uuid** for ID generation
+- **dotenv** for environment config
+- **tsx** for development with watch mode
 
 ## Commands
 
 ```bash
+# Frontend
 cd app
-npm run dev      # Dev server at http://localhost:5173
-npm run build    # Production build to dist/
-npx tsc --noEmit # Type check without emitting
+npm run dev          # Dev server at http://localhost:5173
+npm run build        # Production build to dist/
+npx tsc --noEmit     # Type check without emitting
+
+# Backend
+cd api
+npm run dev          # Dev server at http://localhost:3001 (tsx watch)
+npm run build        # Compile TypeScript to dist/
+npm start            # Run compiled dist/index.js
+
+# Monorepo (from root)
+npm run build        # Builds both app + api
+npm start            # Runs api (serves frontend from app/dist)
+```
+
+## Project Structure (Root)
+
+```
+talk_with_ceo/
+  CLAUDE.md                        # This file — project context for Claude
+  package.json                     # Monorepo scripts (build:app, build:api, start)
+  Procfile                         # Railway: web: cd api && node dist/index.js
+  .gitignore
+  app/                             # Frontend (React + Vite)
+  api/                             # Backend (Node.js + Express + PostgreSQL)
+  assets/                          # El Dorado design library (reference, not used by app)
+  docs/                            # Reference documents
+    talk-with-ceo-spec.md          # Product spec (hero, inputs, tone of voice)
+    forms.csv                      # CEO questionnaire responses
+    infos.txt                      # Backend requirements notes (Portuguese)
+  inst2.md                         # Redash integration + engagement routing instructions
+  User_information_2026_03_12.csv  # Sample user data export (110 rows, reference)
 ```
 
 ## Frontend Architecture
 
 ```
 app/src/
-  App.tsx                          # Orchestrator — splash → chat → input → confirmation
-  store.ts                         # Zustand store (mood, messages, userName, userEmail)
-  constants.ts                     # CEO texts, mood options, delays
-  types/index.ts                   # AppState, MoodType, Message
-  index.css                        # Tailwind + tokens + keyframes
+  main.tsx                           # Entry — renders App or AdminApp based on /admin route
+  App.tsx                            # Orchestrator — splash → username → chat → confirm → rating → confetti
+  store.ts                           # Zustand store (mood, messages, userName, userId, conversationId)
+  constants.ts                       # CEO texts, mood options, delays
+  types/index.ts                     # AppState, MoodType, Message + Admin types
+  index.css                          # Tailwind @theme tokens + keyframes + scrollbar
+  api/
+    client.ts                        # User-facing API (users, conversations, messages, rating)
+    admin-client.ts                  # Admin API + mock mode (password '123' = offline mock data)
   components/
     chat/
-      ConversationThread.tsx       # Scrollable area — video + bubbles + typing
-      ChatBubble.tsx               # Individual bubble (CEO=dark, user=yellow)
-      VideoBubble.tsx              # Inline CEO video with play/pause
-      AvatarCircle.tsx             # Circular avatar + online dot
-      TypingIndicator.tsx          # 3 animated dots
-      ChatWallpaper.tsx            # Decorative background with product assets
+      ConversationThread.tsx         # Scrollable area — video + bubbles + typing
+      ChatBubble.tsx                 # Individual bubble (CEO=dark, user=yellow)
+      VideoBubble.tsx                # Inline CEO video with play/pause
+      AvatarCircle.tsx               # Circular avatar + online dot
+      TypingIndicator.tsx            # 3 animated dots
+      ChatWallpaper.tsx              # Decorative background with product assets
     input/
-      MessageInput.tsx             # Auto-grow textarea + send button
-      SendButton.tsx               # Yellow circular button
-      NameField.tsx                # Optional name field (not currently used)
+      MessageInput.tsx               # Auto-grow textarea + send button
+      SendButton.tsx                 # Yellow circular button
+      SendConfirmation.tsx           # "Are you sure?" overlay before sending
     layout/
-      StatusBar.tsx                # Top bar — "Guille" + online dot + logo
+      StatusBar.tsx                  # Top bar — "Guille" + online dot + logo
+      UsernamePopup.tsx              # First-visit username identification popup
+      RatingPopup.tsx                # 1-5 star rating after message sent (can skip)
     intro/
-      SplashScreen.tsx             # Initial screen with logo + progress bar
-      FloatingAssets.tsx           # Floating assets (used in splash)
-      VideoIntro.tsx               # Fullscreen video intro (not integrated)
-    mood/
-      MoodSelector.tsx             # Horizontal pill container
-      MoodPill.tsx                 # Individual pill with color
+      SplashScreen.tsx               # Initial screen with logo + progress bar
+      FloatingAssets.tsx             # Floating assets (used in splash)
+    admin/
+      AdminApp.tsx                   # Admin shell — login state → dashboard or detail
+      AdminLogin.tsx                 # Password login form
+      AdminDashboard.tsx             # Conversation list with filters
+      ConversationDetail.tsx         # Single conversation view + CEO notes
     confirmation/
-      ConfettiEffect.tsx           # Yellow confetti canvas
-      EmailFollowUp.tsx            # Post-send email input
-      SupportRedirect.tsx          # Support link
+      ConfettiEffect.tsx             # Yellow confetti canvas
+    mood/
+      MoodSelector.tsx               # Horizontal pill container (NOT INTEGRATED)
+      MoodPill.tsx                   # Individual pill with color (NOT INTEGRATED)
     decoration/
-      ProductStrip.tsx             # Horizontal product marquee
-      FloatingAssets.tsx           # Floating assets for desktop
+      ProductStrip.tsx               # Horizontal product marquee (NOT INTEGRATED)
+      FloatingAssets.tsx             # Floating assets for desktop (NOT INTEGRATED)
   hooks/
-    useTypingSequence.ts           # Controls sequential bubble timing
-    useSounds.ts                   # Plays received/sent sounds
-    useAutoResize.ts               # Textarea auto-grow
-    useFirstVisit.ts               # sessionStorage — splash only on first visit
+    useTypingSequence.ts             # Controls sequential bubble timing
+    useSounds.ts                     # Plays received/sent sounds (30% volume)
+    useAutoResize.ts                 # Textarea auto-grow (max 150px)
+    useFirstVisit.ts                 # sessionStorage — splash only on first visit
+    useUserIdentification.ts         # localStorage + POST /api/users + engagement data
 ```
 
-## App Flow
+## App Flow (Current Implementation)
 
-1. **Splash** (first visit): El Dorado logo pulses + progress bar + floating assets (2.2s)
-2. **Chat**: StatusBar + ConversationThread with CEO video + 3 sequential bubbles with typing indicator
-3. **Input**: Textarea + send button appears after sequence completes
-4. **Post-send**: User bubble → CEO typing → confirmation → confetti
+```
+1.  User opens miniapp
+2.  If first visit → SplashScreen (logo + progress bar, 2.2s)
+3.  If not identified → UsernamePopup → POST /api/users → localStorage
+    └─ Backend fetches Redash metrics → returns engagement classification
+4.  Chat screen: StatusBar + ConversationThread
+    a. VideoBubble (CEO video with play/pause)
+    b. 3 CEO text bubbles with typing indicators (sequential, ~3s total)
+       └─ 3rd bubble replaced by engagement message if backend provided one
+    c. Sound effect on each bubble arrival
+5.  MessageInput appears after sequence completes
+6.  User writes message → taps send
+7.  SendConfirmation popup: "Are you sure?" → "Yes" / "Modify"
+8.  On confirm:
+    a. POST /api/conversations → conversation_id
+    b. POST /api/conversations/:id/messages {text, metadata: {mood}}
+    c. User bubble appears in chat
+    d. CEO typing indicator (600ms)
+    e. CEO confirmation bubble (from API response or fallback)
+9.  RatingPopup: 1-5 stars or skip → PATCH /api/conversations/:id/rating
+10. ConfettiEffect + final "Guille will read your message"
+```
+
+## Backend Architecture
+
+```
+api/src/
+  index.ts                           # Express app + SPA static file serving + graceful shutdown
+  config.ts                          # Env vars with validation (throws on missing required)
+  db/
+    client.ts                        # pg.Pool with SSL auto-detection
+    schema.sql                       # Full DDL (4 tables, 2 enums, 3 indexes)
+    migrations/
+      001_add_first_name.sql         # Adds first_name column to users
+  routes/
+    users.ts                         # POST /api/users (create + Redash enrichment)
+    conversations.ts                 # POST /api/conversations
+    messages.ts                      # POST /api/conversations/:id/messages (+ auto CEO response)
+    rating.ts                        # PATCH /api/conversations/:id/rating
+    admin.ts                         # Login + list + messages + notes (JWT protected)
+  services/
+    response.service.ts              # CEO response generation (MVP: fixed string)
+    redash.service.ts                # Redash Query 1464 execution (10s timeout, graceful fallback)
+    engagement.service.ts            # User engagement classification → personalized messages
+  middleware/
+    admin-auth.ts                    # JWT verification for admin routes
+  types/
+    redash.ts                        # TypeScript interfaces for Redash data
+```
+
+### Database Schema (PostgreSQL)
+
+```
+users
+  id              UUID PK
+  external_id     TEXT UNIQUE    ← username (MVP) or userId from host app (future)
+  email           TEXT nullable  ← enriched from Redash
+  first_name      TEXT nullable  ← enriched from Redash
+  created_at      TIMESTAMPTZ
+  updated_at      TIMESTAMPTZ
+
+conversations
+  id              UUID PK
+  user_id         UUID FK → users
+  rating          INT nullable   ← 0-5, user can skip
+  status          ENUM           ← 'active' | 'closed' | 'ticket_opened'
+  created_at      TIMESTAMPTZ
+  updated_at      TIMESTAMPTZ
+
+messages
+  id              UUID PK
+  conversation_id UUID FK → conversations
+  sender          ENUM           ← 'user' | 'ceo' | 'system'
+  text            TEXT
+  metadata        JSONB nullable ← mood, ai_model, tokens_used, etc.
+  created_at      TIMESTAMPTZ
+
+ceo_notes
+  id              UUID PK
+  conversation_id UUID FK → conversations
+  text            TEXT
+  created_at      TIMESTAMPTZ
+```
+
+### API Endpoints
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| `GET` | `/api/health` | — | Health check |
+| `POST` | `/api/users` | — | Create/identify user + Redash enrichment + engagement |
+| `POST` | `/api/conversations` | — | Start conversation |
+| `POST` | `/api/conversations/:id/messages` | — | Send message (auto-generates CEO response) |
+| `PATCH` | `/api/conversations/:id/rating` | — | Submit 0-5 rating |
+| `POST` | `/api/admin/login` | — | Password → JWT (24h expiry) |
+| `GET` | `/api/admin/conversations` | JWT | List conversations (filters: status, rating_min/max, limit, offset) |
+| `GET` | `/api/admin/conversations/:id/messages` | JWT | Get conversation messages |
+| `GET` | `/api/admin/conversations/:id/notes` | JWT | Get CEO notes |
+| `POST` | `/api/admin/conversations/:id/notes` | JWT | Add CEO note |
+
+### Redash Integration
+
+The backend enriches user data via El Dorado's Redash analytics platform on every `POST /api/users` call.
+
+**Flow:**
+```
+POST /api/users {external_id} →
+  1. Create/fetch user in PostgreSQL
+  2. Call Redash Query 1464 with user={external_id}
+  3. Redash returns: email, firstName, vol_total, vol_30d, tx_total, tx_30d,
+     rank_vol_total, rank_vol_30d, rank_tx_total, rank_tx_30d
+  4. Update user.email + user.first_name from Redash
+  5. Classify engagement level
+  6. Return user + engagement data to frontend
+```
+
+**Redash Query 1464 columns** (all ranks are **strings**, not numbers):
+
+| Column | Type | Example |
+|--------|------|---------|
+| firstName | string | "SSM" |
+| email | string | "s.schramm@eldorado.io" |
+| vol_total | float | 11269.53 |
+| vol_30d | float | 11.07 |
+| tx_total | int | 37 |
+| tx_30d | int | 1 |
+| rank_vol_total | string | "Top 5%" |
+| rank_vol_30d | string | "Iniciante" |
+| rank_tx_total | string | "Top 5%" |
+| rank_tx_30d | string | "Iniciante" |
+
+Rank values returned by Redash: `"Top 1%"`, `"Top 2%"`, `"Top 3%"`, `"Top 5%"`, `"Top 10%"`, `"Top 15%"`, `"Top 20%"`, `"Top 25%"`, `"Top 30%"`, `"Iniciante"`
+
+**Engagement Classification** (`engagement.service.ts`):
+
+| Flow | Condition | Personalized Message |
+|------|-----------|---------------------|
+| **VIP** | rank_vol_total or rank_tx_total is Top 1-10% | "{name}, sos de nuestros usuarios top..." |
+| **Inactive** | tx_total === 0 | "todavía no hiciste tu primera transacción..." |
+| **Warmup** | tx_total 1-3 | "Ya arrancaste a usar El Dorado..." |
+| **Regular** | tx_total > 3 | Standard greeting |
+
+- VIP detection uses `VIP_RANKS` constant: `['Top 1%', 'Top 2%', 'Top 3%', 'Top 5%', 'Top 10%']`
+- Non-blocking: if Redash fails, user creation still succeeds (engagement = null)
+- 10-second timeout on Redash queries
+- Redash API parameter is `user` (not `p_user` — the `p_` prefix is only for the Redash UI URL)
+- Frontend replaces 3rd CEO bubble with engagement message when available
+
+### CEO Response (MVP)
+
+`response.service.ts` returns a fixed Spanish string. Prepared for OpenAI swap:
+- Same function signature, same endpoint contract
+- Future: feed conversation history to LLM with Guille's personality prompt
+- AI could detect complaints → suggest opening support ticket
+
+## Admin Dashboard (/admin)
+
+Frontend route served from the same app. Entry point: `main.tsx` checks `window.location.pathname`.
+
+**Components:**
+- `AdminLogin` — password form → `POST /api/admin/login` → JWT stored in sessionStorage
+- `AdminDashboard` — conversation list with status filters, shows user, message preview, rating, date
+- `ConversationDetail` — full message thread + CEO notes + add note form
+
+**Mock Mode:** Password `123` activates offline mock data (5 sample conversations with threads and notes). Useful for development without backend.
+
+**Admin API client** (`admin-client.ts`): All calls check `sessionStorage('admin_mock')` — if true, returns hardcoded data instead of calling backend.
+
+## Environment Variables
+
+### Backend (`api/.env`)
+```
+DATABASE_URL=postgresql://user:password@localhost:5432/talk_with_ceo   # Required
+ADMIN_PASSWORD=change-me                                                # Required
+JWT_SECRET=change-me-to-a-random-string                                 # Required
+PORT=3001                                                               # Default: 3001
+CORS_ORIGIN=http://localhost:5173                                       # Default: *
+REDASH_BASE_URL=https://reports.eldorado.io                             # Default
+REDASH_API_KEY=                                                         # Required for Redash
+REDASH_USER_QUERY_ID=1464                                               # Default: 1464
+```
+
+### Frontend (`app/.env`)
+```
+VITE_API_URL=                  # Empty = same origin (uses Vite proxy in dev)
+```
+
+### Vite Proxy (dev only)
+`/api` → `http://localhost:3001` (configured in `vite.config.ts`)
 
 ## Color Palette
 
@@ -91,41 +324,37 @@ app/src/
 
 ### CSS/Tailwind
 - **Tailwind v4**: use `@theme` in `index.css` for custom tokens, not `tailwind.config`
-- **Inline styles for critical layout**: padding, max-width, and font-size in bubbles use inline styles (not Tailwind classes) because arbitrary values (`max-w-[240px]`) may not apply correctly with HMR
+- **Inline styles for critical layout**: padding, max-width, and font-size in bubbles use inline styles (not Tailwind classes) because arbitrary values may not apply correctly with HMR
 - **Container**: max-w-[480px] centered, simulating a mobile screen on desktop
 
 ### Components
 - **Language**: All copy in Argentine Spanish (vos, escribi, conta)
-- **Sounds**: `msg-sent.mp3` used for both received/sent, volume 30%
-- **Wallpaper**: 4 illustrations (tarjeta, mj-st4, conta-em-dolares, p2p-optimizado) distributed in grid with opacity 35%, saturate 0.8
+- **Sounds**: `msg-sent.mp3` / `msg-received.mp3`, volume 30%
+- **Wallpaper**: 4 illustrations in grid with opacity 35%, saturate 0.8
 - **CEO bubbles**: max-width 65%, bg `#1f1f1f`, border `rgba(60,60,60,0.6)`, font 14px
 - **User bubbles**: yellow bg `#FFFF00`, black text
-- **Animations**: use Framer Motion with `type: 'spring'` for entrances, `AnimatePresence` for exits
+- **Animations**: Framer Motion `type: 'spring'` for entrances, `AnimatePresence` for exits
 
 ### Assets
 - Product assets used by the app: `app/public/assets/`
-- Full El Dorado design library (reference only, not used by app): `assets/`
-- CEO video: `video_guille.mp4`
-- CEO photo: `guille.jpeg`
+- Full El Dorado design library (reference only): `assets/`
+- CEO video: `video_guille.mp4` / CEO photo: `guille.jpeg`
 
-#### Assets actively used by the app (16 files)
+#### Assets actively used (16 files)
 - `guille.jpeg` — CEO photo (AvatarCircle)
 - `logo.svg` — El Dorado logo (SplashScreen, StatusBar)
-- `video_guille.mp4` — CEO video (VideoBubble, VideoIntro)
-- `msg-sent.mp3` — Send sound (useSounds)
-- `msg-received.mp3` — Receive sound (useSounds)
-- `tarjeta.webp`, `mj-st4.webp`, `conta-em-dolares.webp`, `p2p-optimizado.webp` — Wallpaper + floating assets
-- `tarjeta-eldorado.webp`, `mj-st5.webp`, `criptos-disponibles.avif`, `mockup-usd.png` — Decoration components
+- `video_guille.mp4` — CEO video (VideoBubble)
+- `msg-sent.mp3` — Send sound / `msg-received.mp3` — Receive sound
+- `tarjeta.webp`, `mj-st4.webp`, `conta-em-dolares.webp`, `p2p-optimizado.webp` — Wallpaper
+- `tarjeta-eldorado.webp`, `mj-st5.webp`, `criptos-disponibles.avif`, `mockup-usd.png` — Decoration
 - `tag-usd.svg`, `tag-cripto.svg`, `tag-p2p.svg` — Floating asset tags
 
-#### Unused assets in `app/public/assets/` (3 files)
-- `mockup-celular-mundo.avif` — Not referenced in code
-- `msg-sent-short.mp3` — Not referenced in code
-- `tag-tarjeta.svg` — Not referenced in code
+#### Unused assets (3 files)
+- `mockup-celular-mundo.avif`, `msg-sent-short.mp3` (0 bytes), `tag-tarjeta.svg`
 
 ## Components NOT Currently Integrated
 
-These components exist but are not in the main `App.tsx` flow:
+These exist but are not in the main flow — can be re-integrated as needed:
 - `VideoIntro.tsx` — fullscreen video screen before chat
 - `MoodSelector.tsx` / `MoodPill.tsx` — mood pills (removed from footer)
 - `EmailFollowUp.tsx` — post-send email collection
@@ -134,192 +363,42 @@ These components exist but are not in the main `App.tsx` flow:
 - `NameField.tsx` — optional name field
 - `decoration/FloatingAssets.tsx` — floating assets for desktop
 
-Can be re-integrated as needed.
+## Zustand Store (`store.ts`)
+
+```typescript
+{
+  state: AppState        // 'splash' | 'conversation' | 'composing' | 'sent' | 'confirmed'
+  mood: MoodType         // 'idea' | 'positive' | 'frustrated' | 'talk' | null
+  messages: Message[]    // Chat message history
+  userName: string       // Display name
+  userEmail: string      // Optional email
+  userId: string         // Backend UUID
+  conversationId: string // Current conversation UUID
+}
+```
+
+## Deploy
+
+- **Platform**: Railway (monorepo, single service)
+- **Procfile**: `web: cd api && node dist/index.js`
+- **Build**: Root `npm run build` → builds app + api
+- **Runtime**: Express serves `app/dist/` as static files with SPA fallback
+- **Database**: PostgreSQL (Railway managed or external)
+- **SSL**: Auto-detected for non-localhost DATABASE_URL
 
 ## Reference Documents
 
 - `docs/talk-with-ceo-spec.md` — Product spec (hero, inputs, tone of voice)
 - `docs/forms.csv` — CEO Guille's alignment questionnaire responses
-- `docs/infos.txt` — Backend requirements and roadmap notes
-- `.claude/plans/reactive-frolicking-hearth.md` — Original implementation plan
+- `docs/infos.txt` — Backend requirements and roadmap notes (Portuguese)
+- `inst2.md` — Redash integration and engagement routing instructions
 
-## Backend + Database (ALIGNED DECISIONS)
+## Future Roadmap
 
-### Current Frontend State
-The app is 100% frontend. Message sending currently:
-1. Adds to local state (Zustand) in `App.tsx:handleSend`
-2. Does `console.log` of the data
-3. Shows hardcoded confirmation (`CEO_CONFIRMATION_MESSAGE` in `constants.ts`)
-4. **Nothing is persisted** — if you reload, everything is lost
-
-The Zustand store (`store.ts`) already has `mood`, `userName`, `userEmail`, `messages` fields.
-The main integration point is `App.tsx:handleSend`.
-
-### User Identification (MVP)
-- Popup on first visit: "What's your username?"
-- Username saved to `localStorage` + `POST /api/users`
-- Next visits: reads localStorage, goes straight to chat
-- **Future**: replace popup with hashed userId from the host app (backend doesn't change — it receives `external_id` from any source)
-
-### ERD (Entity-Relationship Diagram)
-
-```
-users
-  id              UUID PK
-  external_id     TEXT UNIQUE    ← username (MVP) or userId from app (future)
-  email           TEXT nullable
-  created_at      TIMESTAMPTZ
-  updated_at      TIMESTAMPTZ
-
-conversations
-  id              UUID PK
-  user_id         UUID FK → users
-  rating          INT nullable   ← 0-5, optional (user can skip)
-  status          ENUM           ← 'active' | 'closed' | 'ticket_opened'
-  created_at      TIMESTAMPTZ
-  updated_at      TIMESTAMPTZ
-
-messages
-  id              UUID PK
-  conversation_id UUID FK → conversations
-  sender          ENUM           ← 'user' | 'ceo' | 'system'
-  text            TEXT
-  metadata        JSONB nullable ← mood, ai_model, tokens_used, etc.
-  created_at      TIMESTAMPTZ
-
-ceo_notes
-  id              UUID PK
-  conversation_id UUID FK → conversations
-  text            TEXT
-  created_at      TIMESTAMPTZ
-```
-
-**Design decisions:**
-- `rating` belongs to `conversations` (1 rating per interaction, not per message)
-- `metadata` JSONB on messages = flexible (today stores mood, tomorrow stores AI data)
-- Sums and averages = computed queries, not stored fields
-- `ceo_notes` separate table for Guille's dashboard comments
-
-### Backend Architecture
-
-```
-api/                              ← NEW — Node.js backend
-  src/
-    index.ts                      # Entry point, Express setup
-    config.ts                     # Env vars (DB_URL, ADMIN_PASSWORD, PORT)
-    db/
-      client.ts                   # PostgreSQL connection
-      schema.sql                  # Table DDL
-      migrations/                 # Schema versioning
-    routes/
-      users.ts                    # POST /api/users
-      conversations.ts            # Conversation CRUD
-      messages.ts                 # POST messages
-      rating.ts                   # PATCH rating
-      admin.ts                    # Login + list + comment
-    services/
-      response.service.ts         # Generates CEO response (MVP: fixed | future: AI)
-      ticket.service.ts           # Opens ticket via email
-    middleware/
-      admin-auth.ts               # Verifies CEO JWT
-```
-
-### API Endpoints
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| `POST` | `/api/users` | Create/identify user (external_id + email) |
-| `POST` | `/api/conversations` | Start conversation (returns conversation_id) |
-| `POST` | `/api/conversations/:id/messages` | Send message (returns CEO response) |
-| `PATCH` | `/api/conversations/:id/rating` | Rating 0-5 (optional, user can skip) |
-| `GET` | `/api/users/:id/conversations` | User history (future roadmap) |
-| `POST` | `/api/admin/login` | Password → JWT token |
-| `GET` | `/api/admin/conversations` | List all conversations (filters: date, rating, status) |
-| `POST` | `/api/admin/conversations/:id/notes` | CEO adds comment |
-| `POST` | `/api/conversations/:id/ticket` | Open ticket via email (future roadmap) |
-
-### AI Preparation (OpenAI)
-
-`response.service.ts` abstracts response generation:
-
-```typescript
-// MVP: fixed response
-export async function generateResponse(conversation): Promise<string> {
-  return CEO_CONFIRMATION_MESSAGE;
-}
-
-// FUTURE: swap to AI — same endpoint, same contract
-export async function generateResponse(conversation): Promise<string> {
-  const history = await getMessages(conversation.id);
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4',
-    system: GUILLE_CONTEXT_PROMPT,
-    messages: history.map(m => ({
-      role: m.sender === 'user' ? 'user' : 'assistant',
-      content: m.text
-    }))
-  });
-  return response.choices[0].message.content;
-}
-```
-
-**To integrate AI in the future:**
-1. Remove send confirmation popup
-2. Swap response.service to call OpenAI
-3. Train prompt with Guille's context (personality, tone, limits)
-4. AI detects complaints → asks if user wants to open a ticket
-5. Frontend already supports N messages in thread (conversation model)
-
-### Complete Flow (MVP)
-
-```
-1.  User opens miniapp
-2.  Popup: "What's your username?" → POST /api/users → localStorage
-3.  CEO video + sequential bubbles (current flow)
-4.  User writes message
-5.  Confirmation popup: "Are you sure?" → "Yes, send it" / "Let me modify"
-6.  POST /api/conversations → conversation_id
-7.  POST /api/conversations/:id/messages {text, metadata: {mood}}
-8.  Backend saves + returns fixed CEO response
-9.  Rating popup: stars 0-5 → PATCH /api/conversations/:id/rating (can skip)
-10. Final screen: "Thanks! Guille will read your message."
-```
-
-### CEO Dashboard (/admin)
-
-- Same URL, `/admin` route
-- Password login (verified by backend, returns JWT)
-- Lists all conversations: userId, timestamp, message, rating
-- CEO can add comments (ceo_notes)
-- Filters: by date, by rating, by status
-
-### Future Roadmap
-
-1. **Conversation history** — show user's past conversations
-2. **Conversational AI** — swap response.service to OpenAI with Guille's context
-3. **Complaint detection** — AI identifies issues, asks if user wants to open a ticket
-4. **Ticket opening via email** — sends email to company support system
-5. **Host app userId** — replace popup with real userId when integration is ready
+1. **Conversational AI** — swap `response.service.ts` to OpenAI with Guille's personality prompt
+2. **Complaint detection** — AI identifies issues, suggests opening support ticket
+3. **Ticket opening via email** — `ticket.service.ts` (not yet created)
+4. **Conversation history** — `GET /api/users/:id/conversations` (not yet implemented)
+5. **Host app userId** — replace username popup with hashed userId from host app
 6. **CEO video via CDN** — serve from bucket to swap without redeploy
-
-## Project Structure (Root)
-
-```
-talk_with_ceo/
-  CLAUDE.md                      # This file — project context for Claude
-  app/                           # Frontend (React + Vite)
-  api/                           # Backend (Node.js) — TO BE CREATED
-  assets/                        # El Dorado design library (reference, not used by app)
-  docs/                          # Reference documents
-    talk-with-ceo-spec.md        # Product spec
-    forms.csv                    # CEO questionnaire responses
-    infos.txt                    # Backend requirements notes
-```
-
-## Deploy
-
-- Target: Railway (per spec)
-- Frontend: `cd app && npm run build` generates `dist/`
-- Backend: `cd api && npm start`
-- DB: PostgreSQL (Railway managed or external)
-- Both on same Railway deploy (monorepo) or separate services
+7. **Database migration runner** — migrations exist but no automated runner yet
