@@ -29,7 +29,7 @@ export const DEFAULT_ENGAGEMENT_MESSAGE: Message = {
 /** Final message — always shown last */
 export const CEO_FINAL_MESSAGE: Message = {
   id: 'ceo-final',
-  text: 'Quiero escucharte personalmente — contame lo que quieras.',
+  text: 'Quiero escucharte personalmente, contame lo que quieras.',
   sender: 'ceo',
 };
 

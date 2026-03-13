@@ -56,7 +56,7 @@ export function classifyEngagement(metrics: UserMetricsRow): EngagementResult {
     message = `Estoy muy contento de hablar con vos, más aún porque estás entre el ${bestRank} de usuarios de El Dorado en ${context}. Por eso me importa mucho tu punto de vista.`;
   } else if (metrics.tx_total === 0) {
     flow = 'inactive';
-    message = 'Estoy muy contento de hablar con vos. Vi que todavía no hiciste tu primera transacción — me encantaría ayudarte a arrancar.';
+    message = 'Estoy muy contento de hablar con vos. Vi que todavía no hiciste tu primera transacción, me encantaría ayudarte a arrancar.';
   } else if (metrics.tx_total > 0 && metrics.tx_total <= 3) {
     flow = 'warmup';
     message = `Estoy muy contento de hablar con vos, más aún porque ya hiciste ${metrics.tx_total} transaccion${metrics.tx_total === 1 ? '' : 'es'} en El Dorado. Me importa mucho tu punto de vista.`;
