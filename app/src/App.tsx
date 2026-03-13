@@ -7,15 +7,19 @@ import { ConfettiEffect } from './components/confirmation/ConfettiEffect';
 import { SplashScreen } from './components/intro/SplashScreen';
 import { UsernamePopup } from './components/intro/UsernamePopup';
 import { SendConfirmation } from './components/confirmation/SendConfirmation';
+import { SupportConfirmation } from './components/confirmation/SupportConfirmation';
 import { RatingPopup } from './components/confirmation/RatingPopup';
 import { useTypingSequence } from './hooks/useTypingSequence';
 import { useFirstVisit } from './hooks/useFirstVisit';
 import { useUserIdentification } from './hooks/useUserIdentification';
 import { useStore } from './store';
 import { playReceived, playSent } from './hooks/useSounds';
-import { startConversation, sendMessage, rateConversation } from './api/client';
+import { startConversation, sendMessage, rateConversation, createTicket } from './api/client';
 import { buildGreetingMessage, DEFAULT_ENGAGEMENT_MESSAGE, CEO_FINAL_MESSAGE, CEO_CONFIRMATION_MESSAGE, TYPING_DELAYS } from './constants';
 import type { Message } from './types';
+
+const CEO_DISMISS_MESSAGE =
+  '¡Listo! Ya lo recibí. Lo voy a leer personalmente. Gracias por tomarte el tiempo. Si tenés algún problema, podés escribirme de nuevo.';
 
 export default function App() {
   const { isFirstVisit, markVisited } = useFirstVisit();
@@ -27,10 +31,12 @@ export default function App() {
   const [sent, setSent] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [confirmationTyping, setConfirmationTyping] = useState(false);
-  const [confirmationMessage, setConfirmationMessage] = useState<Message | null>(null);
+  const [postSendMessages, setPostSendMessages] = useState<Message[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [pendingMessage, setPendingMessage] = useState('');
   const [showRating, setShowRating] = useState(false);
+  const [complaintDetected, setComplaintDetected] = useState(false);
+  const [showSupportConfirmation, setShowSupportConfirmation] = useState(false);
 
   const addMessage = useStore((s) => s.addMessage);
   const mood = useStore((s) => s.mood);
@@ -71,12 +77,17 @@ export default function App() {
     prevVisibleCount.current = visibleCount;
   }, [visibleCount]);
 
-  // Play sound when confirmation message arrives
+  // Play sound when a new post-send message arrives
+  const prevPostSendCount = useRef(0);
   useEffect(() => {
-    if (confirmationMessage) {
-      playReceived();
+    if (postSendMessages.length > prevPostSendCount.current) {
+      const latest = postSendMessages[postSendMessages.length - 1];
+      if (latest.sender === 'ceo') {
+        playReceived();
+      }
     }
-  }, [confirmationMessage]);
+    prevPostSendCount.current = postSendMessages.length;
+  }, [postSendMessages]);
 
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
@@ -136,6 +147,7 @@ export default function App() {
 
     // Start API calls
     let ceoResponseText = CEO_CONFIRMATION_MESSAGE;
+    let isComplaint = false;
 
     try {
       const currentUserId = await awaitRealUserId();
@@ -145,9 +157,12 @@ export default function App() {
 
       const result = await sendMessage(conversation.id, text, { mood });
       ceoResponseText = result.ceoResponse.text;
+      isComplaint = result.complaintDetected;
     } catch {
       // API failed — use hardcoded fallback
     }
+
+    setComplaintDetected(isComplaint);
 
     setTimeout(() => {
       setConfirmationTyping(true);
@@ -157,17 +172,84 @@ export default function App() {
 
     setTimeout(() => {
       setConfirmationTyping(false);
-      setConfirmationMessage({
-        id: 'ceo-confirm',
-        text: ceoResponseText,
-        sender: 'ceo',
-      });
+      setPostSendMessages((prev) => [
+        ...prev,
+        { id: 'ceo-confirm', text: ceoResponseText, sender: 'ceo' },
+      ]);
     }, confirmAt);
 
     setTimeout(() => {
-      setShowRating(true);
+      if (isComplaint) {
+        setShowSupportConfirmation(true);
+      } else {
+        setShowRating(true);
+      }
     }, confirmAt + 3000);
   }, [pendingMessage, addMessage, mood, awaitRealUserId, setConversationId]);
+
+  const handleSupportYes = useCallback(async () => {
+    setShowSupportConfirmation(false);
+
+    // Add user choice as bubble
+    setPostSendMessages((prev) => [
+      ...prev,
+      { id: `user-support-yes-${Date.now()}`, text: 'Sí, por favor', sender: 'user' },
+    ]);
+    playSent();
+
+    let ceoText =
+      '¡Listo! Ya hablé con el equipo de soporte, se van a comunicar con vos en los próximos minutos.';
+
+    try {
+      if (conversationIdRef.current) {
+        const result = await createTicket(conversationIdRef.current);
+        ceoText = result.ceoResponse.text;
+      }
+    } catch {
+      // Ticket creation failed — use fallback text
+    }
+
+    // Show typing then ticket confirmation bubble
+    setConfirmationTyping(true);
+
+    setTimeout(() => {
+      setConfirmationTyping(false);
+      setPostSendMessages((prev) => [
+        ...prev,
+        { id: 'ceo-ticket-confirm', text: ceoText, sender: 'ceo' },
+      ]);
+    }, TYPING_DELAYS.typingDuration);
+
+    setTimeout(() => {
+      setShowRating(true);
+    }, TYPING_DELAYS.typingDuration + 3000);
+  }, []);
+
+  const handleSupportNo = useCallback(() => {
+    setShowSupportConfirmation(false);
+
+    // Add user choice as bubble
+    setPostSendMessages((prev) => [
+      ...prev,
+      { id: `user-support-no-${Date.now()}`, text: 'No, está bien', sender: 'user' },
+    ]);
+    playSent();
+
+    // Show typing then dismiss bubble
+    setConfirmationTyping(true);
+
+    setTimeout(() => {
+      setConfirmationTyping(false);
+      setPostSendMessages((prev) => [
+        ...prev,
+        { id: 'ceo-dismiss', text: CEO_DISMISS_MESSAGE, sender: 'ceo' },
+      ]);
+    }, TYPING_DELAYS.typingDuration);
+
+    setTimeout(() => {
+      setShowRating(true);
+    }, TYPING_DELAYS.typingDuration + 3000);
+  }, []);
 
   const handleRate = useCallback(
     async (rating: number) => {
@@ -220,12 +302,20 @@ export default function App() {
           ceoMessages={ceoMessages}
           visibleCount={visibleCount}
           isTyping={isTyping}
-          confirmationMessage={confirmationMessage}
+          postSendMessages={postSendMessages}
           isConfirmationTyping={confirmationTyping}
         />
 
         {!sent && sequenceComplete && (
           <MessageInput onSend={handleSend} />
+        )}
+
+        {/* Support confirmation inline (complaint flow) */}
+        {showSupportConfirmation && (
+          <SupportConfirmation
+            onYes={handleSupportYes}
+            onNo={handleSupportNo}
+          />
         )}
 
         {/* Send confirmation overlay */}

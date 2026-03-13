@@ -1,33 +1,43 @@
 const CEO_CONFIRMATION_MESSAGE =
   '¡Listo! Ya lo recibí. Lo voy a leer personalmente. Gracias por tomarte el tiempo.';
 
+const CEO_COMPLAINT_MESSAGE =
+  'Solo para confirmar, ¿tuviste algún problema en la app? ¿Querés que me comunique con alguien de soporte para que te envíe un mensaje en los próximos minutos? Siempre busco la mejor calidad para nuestros clientes.';
+
+const COMPLAINT_KEYWORDS = [
+  'problema',
+  'error',
+  'fallo',
+  'no funciona',
+  'no anda',
+  'bug',
+  'queja',
+  'reclamo',
+];
+
+function detectComplaint(text: string): boolean {
+  const lower = text.toLowerCase();
+  return COMPLAINT_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+export interface CeoResponseResult {
+  text: string;
+  complaintDetected: boolean;
+}
+
 /**
  * Generates the CEO response for a given conversation.
  *
- * MVP: returns a fixed confirmation message.
+ * MVP: returns a fixed confirmation or complaint message based on keyword detection.
  * Future: swap to OpenAI with Guille's context prompt.
- *
- * ```ts
- * // FUTURE: OpenAI integration
- * import OpenAI from 'openai';
- * const openai = new OpenAI();
- *
- * export async function generateResponse(conversationId: string): Promise<string> {
- *   const history = await getMessages(conversationId);
- *   const response = await openai.chat.completions.create({
- *     model: 'gpt-4',
- *     messages: [
- *       { role: 'system', content: GUILLE_CONTEXT_PROMPT },
- *       ...history.map(m => ({
- *         role: m.sender === 'user' ? 'user' as const : 'assistant' as const,
- *         content: m.text,
- *       })),
- *     ],
- *   });
- *   return response.choices[0].message.content ?? CEO_CONFIRMATION_MESSAGE;
- * }
- * ```
  */
-export async function generateResponse(_conversationId: string): Promise<string> {
-  return CEO_CONFIRMATION_MESSAGE;
+export async function generateResponse(
+  _conversationId: string,
+  userText: string,
+): Promise<CeoResponseResult> {
+  const complaintDetected = detectComplaint(userText);
+  return {
+    text: complaintDetected ? CEO_COMPLAINT_MESSAGE : CEO_CONFIRMATION_MESSAGE,
+    complaintDetected,
+  };
 }

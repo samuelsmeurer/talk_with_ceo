@@ -56,18 +56,33 @@ export function startConversation(userId: string) {
   );
 }
 
+export interface SendMessageResult {
+  userMessage: { id: string; text: string; sender: string };
+  ceoResponse: { id: string; text: string; sender: string };
+  complaintDetected: boolean;
+}
+
 export function sendMessage(
   conversationId: string,
   text: string,
   metadata?: Record<string, unknown>
 ) {
-  return request<{
-    userMessage: { id: string; text: string; sender: string };
-    ceoResponse: { id: string; text: string; sender: string };
-  }>(`/api/conversations/${conversationId}/messages`, {
+  return request<SendMessageResult>(`/api/conversations/${conversationId}/messages`, {
     method: 'POST',
     body: JSON.stringify({ sender: 'user', text, metadata }),
   });
+}
+
+export interface TicketResult {
+  ceoResponse: { id: string; text: string; sender: string };
+  ticketCreated: boolean;
+}
+
+export function createTicket(conversationId: string) {
+  return request<TicketResult>(
+    `/api/conversations/${conversationId}/ticket`,
+    { method: 'POST' }
+  );
 }
 
 export function rateConversation(conversationId: string, rating: number) {

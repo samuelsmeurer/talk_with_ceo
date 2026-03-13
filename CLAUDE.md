@@ -66,7 +66,7 @@ app/src/
   main.tsx                           # Entry — renders App or AdminApp based on /admin route
   App.tsx                            # Orchestrator — splash → username → chat → confirm → rating → confetti
   store.ts                           # Zustand store (mood, messages, userName, userId, conversationId)
-  constants.ts                       # CEO texts, mood options, delays
+  constants.ts                       # CEO message builders, formatFirstName, delays
   types/index.ts                     # AppState, MoodType, Message + Admin types
   index.css                          # Tailwind @theme tokens + keyframes + scrollbar
   api/
@@ -74,7 +74,7 @@ app/src/
     admin-client.ts                  # Admin API + mock mode (password '123' = offline mock data)
   components/
     chat/
-      ConversationThread.tsx         # Scrollable area — video + bubbles + typing
+      ConversationThread.tsx         # Scrollable area — greeting + video + engagement + final + typing
       ChatBubble.tsx                 # Individual bubble (CEO=dark, user=yellow)
       VideoBubble.tsx                # Inline CEO video with play/pause
       AvatarCircle.tsx               # Circular avatar + online dot
@@ -86,10 +86,10 @@ app/src/
       SendConfirmation.tsx           # "Are you sure?" overlay before sending
     layout/
       StatusBar.tsx                  # Top bar — "Guille" + online dot + logo
-      UsernamePopup.tsx              # First-visit username identification popup
       RatingPopup.tsx                # 1-5 star rating after message sent (can skip)
     intro/
       SplashScreen.tsx               # Initial screen with logo + progress bar
+      UsernamePopup.tsx              # First-visit username identification popup
       FloatingAssets.tsx             # Floating assets (used in splash)
     admin/
       AdminApp.tsx                   # Admin shell — login state → dashboard or detail
@@ -105,7 +105,7 @@ app/src/
       ProductStrip.tsx               # Horizontal product marquee (NOT INTEGRATED)
       FloatingAssets.tsx             # Floating assets for desktop (NOT INTEGRATED)
   hooks/
-    useTypingSequence.ts             # Controls sequential bubble timing
+    useTypingSequence.ts             # Controls sequential bubble timing (4-item sequence)
     useSounds.ts                     # Plays received/sent sounds (30% volume)
     useAutoResize.ts                 # Textarea auto-grow (max 150px)
     useFirstVisit.ts                 # sessionStorage — splash only on first visit
@@ -118,24 +118,42 @@ app/src/
 1.  User opens miniapp
 2.  If first visit → SplashScreen (logo + progress bar, 2.2s)
 3.  If not identified → UsernamePopup → POST /api/users → localStorage
-    └─ Backend fetches Redash metrics → returns engagement classification
-4.  Chat screen: StatusBar + ConversationThread
-    a. VideoBubble (CEO video with play/pause)
-    b. 3 CEO text bubbles with typing indicators (sequential, ~3s total)
-       └─ 3rd bubble replaced by engagement message if backend provided one
-    c. Sound effect on each bubble arrival
-5.  MessageInput appears after sequence completes
-6.  User writes message → taps send
-7.  SendConfirmation popup: "Are you sure?" → "Yes" / "Modify"
-8.  On confirm:
+    └─ Backend fetches Redash metrics → persists all to DB → returns engagement
+4.  2-second delay before chat starts (allows Redash enrichment to complete)
+5.  Chat screen: StatusBar + ConversationThread (4-item sequence with typing indicators)
+    a. CEO greeting text: "¡Hola {Name}, ¿todo bien? Acá Guillermo..."
+       └─ Name: first word only, title case (JESUS ANDRES → Jesus)
+    b. VideoBubble (CEO video with play/pause)
+    c. CEO engagement text (personalized by Redash data or default)
+    d. CEO final text: "Quiero escucharte personalmente, contame lo que quieras."
+    e. Sound effect on each bubble arrival (except first)
+6.  MessageInput appears after sequence completes
+7.  User writes message → taps send
+8.  SendConfirmation popup: "Are you sure?" → "Yes" / "Modify"
+9.  On confirm:
     a. POST /api/conversations → conversation_id
     b. POST /api/conversations/:id/messages {text, metadata: {mood}}
     c. User bubble appears in chat
     d. CEO typing indicator (600ms)
     e. CEO confirmation bubble (from API response or fallback)
-9.  RatingPopup: 1-5 stars or skip → PATCH /api/conversations/:id/rating
-10. ConfettiEffect + final "Guille will read your message"
+10. 3-second delay after CEO confirmation
+11. RatingPopup: 1-5 stars or skip → PATCH /api/conversations/:id/rating
+12. ConfettiEffect + final "Guille will read your message"
 ```
+
+### Message Flow Details (`constants.ts`)
+
+- `formatFirstName(name)` — extracts first word, title case (e.g. "PAOLA ANDREA" → "Paola")
+- `buildGreetingMessage(name)` — builds greeting Message with formatted name
+- `DEFAULT_ENGAGEMENT_MESSAGE` — fallback when Redash data unavailable
+- `CEO_FINAL_MESSAGE` — static final bubble
+
+The 3 CEO text messages are built dynamically in `App.tsx` via `useMemo`:
+1. Greeting (from `buildGreetingMessage` using engagement.firstName or userName)
+2. Engagement (from `engagement.message` or `DEFAULT_ENGAGEMENT_MESSAGE`)
+3. Final (static `CEO_FINAL_MESSAGE`)
+
+`ConversationThread.tsx` renders in fixed order: text[0] → video → text[1] → text[2], controlled by `visibleCount` (1-4).
 
 ## Backend Architecture
 
@@ -148,8 +166,9 @@ api/src/
     schema.sql                       # Full DDL (4 tables, 2 enums, 3 indexes)
     migrations/
       001_add_first_name.sql         # Adds first_name column to users
+      002_add_user_metrics.sql       # Adds Redash metrics + engagement columns to users
   routes/
-    users.ts                         # POST /api/users (create + Redash enrichment)
+    users.ts                         # POST /api/users (create + Redash enrichment + persist metrics)
     conversations.ts                 # POST /api/conversations
     messages.ts                      # POST /api/conversations/:id/messages (+ auto CEO response)
     rating.ts                        # PATCH /api/conversations/:id/rating
@@ -157,23 +176,33 @@ api/src/
   services/
     response.service.ts              # CEO response generation (MVP: fixed string)
     redash.service.ts                # Redash Query 1464 execution (10s timeout, graceful fallback)
-    engagement.service.ts            # User engagement classification → personalized messages
+    engagement.service.ts            # User engagement classification + personalized messages
   middleware/
     admin-auth.ts                    # JWT verification for admin routes
   types/
-    redash.ts                        # TypeScript interfaces for Redash data
+    redash.ts                        # TypeScript interfaces for Redash data + rank constants
 ```
 
 ### Database Schema (PostgreSQL)
 
 ```
 users
-  id              UUID PK
-  external_id     TEXT UNIQUE    ← username (MVP) or userId from host app (future)
-  email           TEXT nullable  ← enriched from Redash
-  first_name      TEXT nullable  ← enriched from Redash
-  created_at      TIMESTAMPTZ
-  updated_at      TIMESTAMPTZ
+  id                UUID PK
+  external_id       TEXT UNIQUE    ← username (MVP) or userId from host app (future)
+  email             TEXT nullable  ← enriched from Redash
+  first_name        TEXT nullable  ← enriched from Redash
+  vol_total         NUMERIC        ← total transaction volume (USD)
+  vol_30d           NUMERIC        ← 30-day transaction volume (USD)
+  tx_total          INTEGER        ← total transaction count
+  tx_30d            INTEGER        ← 30-day transaction count
+  rank_vol_total    TEXT           ← e.g. "Top 5%", "Iniciante"
+  rank_vol_30d      TEXT           ← 30-day volume rank
+  rank_tx_total     TEXT           ← total transaction rank
+  rank_tx_30d       TEXT           ← 30-day transaction rank
+  engagement_flow   TEXT           ← 'vip' | 'inactive' | 'warmup' | 'regular'
+  metrics_updated_at TIMESTAMPTZ   ← last Redash enrichment timestamp
+  created_at        TIMESTAMPTZ
+  updated_at        TIMESTAMPTZ
 
 conversations
   id              UUID PK
@@ -203,7 +232,7 @@ ceo_notes
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | `GET` | `/api/health` | — | Health check |
-| `POST` | `/api/users` | — | Create/identify user + Redash enrichment + engagement |
+| `POST` | `/api/users` | — | Create/identify user + Redash enrichment + persist metrics + engagement |
 | `POST` | `/api/conversations` | — | Start conversation |
 | `POST` | `/api/conversations/:id/messages` | — | Send message (auto-generates CEO response) |
 | `PATCH` | `/api/conversations/:id/rating` | — | Submit 0-5 rating |
@@ -215,7 +244,7 @@ ceo_notes
 
 ### Redash Integration
 
-The backend enriches user data via El Dorado's Redash analytics platform on every `POST /api/users` call.
+The backend enriches user data via El Dorado's Redash analytics platform on every `POST /api/users` call. All metrics are persisted to the `users` table (overwritten on each call).
 
 **Flow:**
 ```
@@ -224,8 +253,8 @@ POST /api/users {external_id} →
   2. Call Redash Query 1464 with user={external_id}
   3. Redash returns: email, firstName, vol_total, vol_30d, tx_total, tx_30d,
      rank_vol_total, rank_vol_30d, rank_tx_total, rank_tx_30d
-  4. Update user.email + user.first_name from Redash
-  5. Classify engagement level
+  4. Classify engagement level (vip/inactive/warmup/regular)
+  5. UPDATE user: email, first_name, all 8 metrics, engagement_flow, metrics_updated_at
   6. Return user + engagement data to frontend
 ```
 
@@ -246,20 +275,24 @@ POST /api/users {external_id} →
 
 Rank values returned by Redash: `"Top 1%"`, `"Top 2%"`, `"Top 3%"`, `"Top 5%"`, `"Top 10%"`, `"Top 15%"`, `"Top 20%"`, `"Top 25%"`, `"Top 30%"`, `"Iniciante"`
 
-**Engagement Classification** (`engagement.service.ts`):
+### Engagement Classification (`engagement.service.ts`)
 
-| Flow | Condition | Personalized Message |
-|------|-----------|---------------------|
-| **VIP** | rank_vol_total or rank_tx_total is Top 1-10% | "{name}, sos de nuestros usuarios top..." |
-| **Inactive** | tx_total === 0 | "todavía no hiciste tu primera transacción..." |
-| **Warmup** | tx_total 1-3 | "Ya arrancaste a usar El Dorado..." |
-| **Regular** | tx_total > 3 | Standard greeting |
+| Flow | Condition | Personalized Message (3rd bubble) |
+|------|-----------|----------------------------------|
+| **VIP** | rank_vol_total or rank_tx_total is Top 1-10% | "Estoy muy contento de hablar con vos, más aún porque estás entre el {bestRank} de usuarios de El Dorado en {context}..." |
+| **Inactive** | tx_total === 0 | "Estoy muy contento de hablar con vos. Vi que todavía no hiciste tu primera transacción, me encantaría ayudarte a arrancar." |
+| **Warmup** | tx_total 1-3 | "Estoy muy contento de hablar con vos, más aún porque ya hiciste {N} transacciones en El Dorado..." |
+| **Regular** | tx_total > 3 | "Estoy muy contento de hablar con vos. Me importa mucho tu punto de vista." |
 
-- VIP detection uses `VIP_RANKS` constant: `['Top 1%', 'Top 2%', 'Top 3%', 'Top 5%', 'Top 10%']`
+**Key helpers:**
+- `VIP_RANKS`: `['Top 1%', 'Top 2%', 'Top 3%', 'Top 5%', 'Top 10%']`
+- `RANK_ORDER`: all ranks from most exclusive to least (used by `getBestRank`)
+- `getBestRank(rankA, rankB)`: returns the more exclusive of two ranks
+- `formatName(name)`: first word, title case (backend side)
+- VIP context: "volumen y transacciones" (both), "volumen de transacciones" (vol only), "cantidad de transacciones" (tx only)
 - Non-blocking: if Redash fails, user creation still succeeds (engagement = null)
 - 10-second timeout on Redash queries
-- Redash API parameter is `user` (not `p_user` — the `p_` prefix is only for the Redash UI URL)
-- Frontend replaces 3rd CEO bubble with engagement message when available
+- Redash API parameter is `user` (not `p_user`)
 
 ### CEO Response (MVP)
 
@@ -328,7 +361,7 @@ VITE_API_URL=                  # Empty = same origin (uses Vite proxy in dev)
 - **Container**: max-w-[480px] centered, simulating a mobile screen on desktop
 
 ### Components
-- **Language**: All copy in Argentine Spanish (vos, escribi, conta)
+- **Language**: All copy in Argentine Spanish (vos, escribi, contame)
 - **Sounds**: `msg-sent.mp3` / `msg-received.mp3`, volume 30%
 - **Wallpaper**: 4 illustrations in grid with opacity 35%, saturate 0.8
 - **CEO bubbles**: max-width 65%, bg `#1f1f1f`, border `rgba(60,60,60,0.6)`, font 14px
@@ -354,13 +387,9 @@ VITE_API_URL=                  # Empty = same origin (uses Vite proxy in dev)
 
 ## Components NOT Currently Integrated
 
-These exist but are not in the main flow — can be re-integrated as needed:
-- `VideoIntro.tsx` — fullscreen video screen before chat
+These exist but are not in the main flow:
 - `MoodSelector.tsx` / `MoodPill.tsx` — mood pills (removed from footer)
-- `EmailFollowUp.tsx` — post-send email collection
-- `SupportRedirect.tsx` — Intercom support link
 - `ProductStrip.tsx` — horizontal product marquee
-- `NameField.tsx` — optional name field
 - `decoration/FloatingAssets.tsx` — floating assets for desktop
 
 ## Zustand Store (`store.ts`)
@@ -383,7 +412,7 @@ These exist but are not in the main flow — can be re-integrated as needed:
 - **Procfile**: `web: cd api && node dist/index.js`
 - **Build**: Root `npm run build` → builds app + api
 - **Runtime**: Express serves `app/dist/` as static files with SPA fallback
-- **Database**: PostgreSQL (Railway managed or external)
+- **Database**: PostgreSQL (Railway managed)
 - **SSL**: Auto-detected for non-localhost DATABASE_URL
 
 ## Reference Documents

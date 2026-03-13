@@ -11,7 +11,7 @@ interface ConversationThreadProps {
   ceoMessages: Message[];
   visibleCount: number;
   isTyping: boolean;
-  confirmationMessage?: Message | null;
+  postSendMessages?: Message[];
   isConfirmationTyping?: boolean;
 }
 
@@ -19,7 +19,7 @@ export function ConversationThread({
   ceoMessages,
   visibleCount,
   isTyping,
-  confirmationMessage,
+  postSendMessages,
   isConfirmationTyping,
 }: ConversationThreadProps) {
   const messages = useStore((s) => s.messages);
@@ -32,7 +32,7 @@ export function ConversationThread({
         behavior: 'smooth',
       });
     }
-  }, [visibleCount, isTyping, messages.length, confirmationMessage, isConfirmationTyping]);
+  }, [visibleCount, isTyping, messages.length, postSendMessages, isConfirmationTyping]);
 
   // Sequence: 1=greeting text, 2=video, 3=engagement text, 4=final text
   return (
@@ -95,18 +95,16 @@ export function ConversationThread({
           ))}
         </AnimatePresence>
 
-        {/* Post-send: CEO typing then confirmation */}
+        {/* Post-send messages (CEO confirmations, user support choices) */}
+        <AnimatePresence>
+          {postSendMessages?.map((msg) => (
+            <ChatBubble key={msg.id} text={msg.text} sender={msg.sender} />
+          ))}
+        </AnimatePresence>
+
+        {/* Post-send typing indicator */}
         <AnimatePresence>
           {isConfirmationTyping && <TypingIndicator key="confirm-typing" showAvatar={false} />}
-        </AnimatePresence>
-        <AnimatePresence>
-          {confirmationMessage && (
-            <ChatBubble
-              key="confirmation"
-              text={confirmationMessage.text}
-              sender="ceo"
-            />
-          )}
         </AnimatePresence>
       </div>
       </div>

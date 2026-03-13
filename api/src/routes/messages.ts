@@ -39,14 +39,17 @@ router.post('/:id/messages', async (req, res) => {
   );
 
   let ceoResponse: MessageRow | undefined;
+  let complaintDetected = false;
 
   if (sender === 'user') {
-    const ceoText = await generateResponse(conversationId);
+    const result = await generateResponse(conversationId, text);
+    complaintDetected = result.complaintDetected;
+
     const ceoResult = await query<MessageRow>(
       `INSERT INTO messages (conversation_id, sender, text)
        VALUES ($1, 'ceo', $2)
        RETURNING *`,
-      [conversationId, ceoText],
+      [conversationId, result.text],
     );
     ceoResponse = ceoResult.rows[0];
   }
@@ -54,6 +57,7 @@ router.post('/:id/messages', async (req, res) => {
   res.status(201).json({
     userMessage: userMsg.rows[0],
     ...(ceoResponse && { ceoResponse }),
+    complaintDetected,
   });
 });
 
