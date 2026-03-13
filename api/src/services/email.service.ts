@@ -14,6 +14,7 @@ const transporter = smtpConfigured
       },
       connectionTimeout: 10000,
       socketTimeout: 10000,
+      dnsOptions: { family: 4 },
     })
   : null;
 
