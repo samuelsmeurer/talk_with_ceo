@@ -15,6 +15,7 @@ Miniapp for El Dorado (LATAM fintech superapp) that lets users send messages dir
 ### Backend
 - **Node.js** + **TypeScript 5.9** + **Express 5**
 - **PostgreSQL** (`pg` 8.13) with connection pooling
+- **Nodemailer** for SMTP email sending (support tickets + user confirmations)
 - **JWT** (`jsonwebtoken` 9.0) for admin authentication
 - **uuid** for ID generation
 - **dotenv** for environment config
@@ -70,7 +71,7 @@ app/src/
   types/index.ts                     # AppState, MoodType, Message + Admin types
   index.css                          # Tailwind @theme tokens + keyframes + scrollbar
   api/
-    client.ts                        # User-facing API (users, conversations, messages, rating)
+    client.ts                        # User-facing API (users, conversations, messages, rating, tickets)
     admin-client.ts                  # Admin API + mock mode (password '123' = offline mock data)
   components/
     chat/
@@ -98,6 +99,7 @@ app/src/
       ConversationDetail.tsx         # Single conversation view + CEO notes
     confirmation/
       ConfettiEffect.tsx             # Yellow confetti canvas
+      SupportConfirmation.tsx        # Inline Sí/No buttons (complaint flow, replaces input bar)
     mood/
       MoodSelector.tsx               # Horizontal pill container (NOT INTEGRATED)
       MoodPill.tsx                   # Individual pill with color (NOT INTEGRATED)
@@ -135,10 +137,19 @@ app/src/
     b. POST /api/conversations/:id/messages {text, metadata: {mood}}
     c. User bubble appears in chat
     d. CEO typing indicator (600ms)
-    e. CEO confirmation bubble (from API response or fallback)
-10. 3-second delay after CEO confirmation
-11. RatingPopup: 1-5 stars or skip → PATCH /api/conversations/:id/rating
-12. ConfettiEffect + final "Guille will read your message"
+    e. CEO response bubble (complaint or standard confirmation)
+10. If NO complaint detected (standard flow):
+    a. 3-second delay → RatingPopup → ConfettiEffect
+11. If complaint detected:
+    a. 3-second delay → inline Sí/No buttons replace input bar
+    b. "Sí, por favor" → user bubble + POST /api/conversations/:id/ticket
+       (sends 2 emails: support ticket + user confirmation)
+       → CEO typing → CEO "ya hablé con soporte" → rating → confetti
+    c. "No, está bien" → user bubble → CEO typing
+       → CEO "Listo, ya lo recibí..." → rating → confetti
+    d. All messages persist as bubbles in postSendMessages array
+12. RatingPopup: 1-5 stars or skip → PATCH /api/conversations/:id/rating
+13. ConfettiEffect + final "Guille will read your message"
 ```
 
 ### Message Flow Details (`constants.ts`)
@@ -169,12 +180,13 @@ api/src/
       002_add_user_metrics.sql       # Adds Redash metrics + engagement columns to users
   routes/
     users.ts                         # POST /api/users (create + Redash enrichment + persist metrics)
-    conversations.ts                 # POST /api/conversations
-    messages.ts                      # POST /api/conversations/:id/messages (+ auto CEO response)
+    conversations.ts                 # POST /api/conversations + POST /:id/ticket (emails + status)
+    messages.ts                      # POST /api/conversations/:id/messages (+ complaint detection)
     rating.ts                        # PATCH /api/conversations/:id/rating
     admin.ts                         # Login + list + messages + notes (JWT protected)
   services/
-    response.service.ts              # CEO response generation (MVP: fixed string)
+    response.service.ts              # CEO response + complaint keyword detection
+    email.service.ts                 # Nodemailer SMTP: support ticket + user confirmation emails
     redash.service.ts                # Redash Query 1464 execution (10s timeout, graceful fallback)
     engagement.service.ts            # User engagement classification + personalized messages
   middleware/
@@ -234,7 +246,8 @@ ceo_notes
 | `GET` | `/api/health` | — | Health check |
 | `POST` | `/api/users` | — | Create/identify user + Redash enrichment + persist metrics + engagement |
 | `POST` | `/api/conversations` | — | Start conversation |
-| `POST` | `/api/conversations/:id/messages` | — | Send message (auto-generates CEO response) |
+| `POST` | `/api/conversations/:id/messages` | — | Send message (+ complaint detection + CEO response) |
+| `POST` | `/api/conversations/:id/ticket` | — | Create support ticket (sends emails, sets status) |
 | `PATCH` | `/api/conversations/:id/rating` | — | Submit 0-5 rating |
 | `POST` | `/api/admin/login` | — | Password → JWT (24h expiry) |
 | `GET` | `/api/admin/conversations` | JWT | List conversations (filters: status, rating_min/max, limit, offset) |
@@ -294,12 +307,26 @@ Rank values returned by Redash: `"Top 1%"`, `"Top 2%"`, `"Top 3%"`, `"Top 5%"`, 
 - 10-second timeout on Redash queries
 - Redash API parameter is `user` (not `p_user`)
 
-### CEO Response (MVP)
+### CEO Response + Complaint Detection (`response.service.ts`)
 
-`response.service.ts` returns a fixed Spanish string. Prepared for OpenAI swap:
-- Same function signature, same endpoint contract
-- Future: feed conversation history to LLM with Guille's personality prompt
-- AI could detect complaints → suggest opening support ticket
+`generateResponse(conversationId, userText)` returns `{ text, complaintDetected }`:
+- **Complaint keywords** (case-insensitive): `problema`, `error`, `fallo`, `no funciona`, `no anda`, `bug`, `queja`, `reclamo`
+- If complaint detected → CEO asks if user wants support contact
+- If no complaint → standard confirmation message
+- `messages.ts` returns `complaintDetected` flag to frontend
+
+### Support Ticket Flow (`email.service.ts` + `conversations.ts`)
+
+`POST /api/conversations/:id/ticket`:
+1. Fetches conversation, user, and last user message from DB
+2. Sends 2 emails via Nodemailer (non-blocking, won't fail request):
+   - **To `soporte@eldorado.io`**: from "Habla con Guille" with username, email, message text
+   - **To user email**: from "Guillermo - CEO de El Dorado" confirming support will reach out
+3. Updates conversation status to `ticket_opened`
+4. Inserts CEO confirmation message
+5. Returns `{ ceoResponse, ticketCreated: true }`
+
+Future: swap `response.service.ts` to OpenAI with Guille's personality prompt.
 
 ## Admin Dashboard (/admin)
 
@@ -326,6 +353,11 @@ CORS_ORIGIN=http://localhost:5173                                       # Defaul
 REDASH_BASE_URL=https://reports.eldorado.io                             # Default
 REDASH_API_KEY=                                                         # Required for Redash
 REDASH_USER_QUERY_ID=1464                                               # Default: 1464
+SMTP_HOST=smtp.gmail.com                                                # SMTP server host
+SMTP_PORT=587                                                           # Default: 587
+SMTP_USER=                                                              # SMTP auth user (email)
+SMTP_PASS=                                                              # SMTP auth password (app password)
+SMTP_FROM=Guillermo - El Dorado <email>                                 # Default display name
 ```
 
 ### Frontend (`app/.env`)
@@ -425,8 +457,8 @@ These exist but are not in the main flow:
 ## Future Roadmap
 
 1. **Conversational AI** — swap `response.service.ts` to OpenAI with Guille's personality prompt
-2. **Complaint detection** — AI identifies issues, suggests opening support ticket
-3. **Ticket opening via email** — `ticket.service.ts` (not yet created)
+2. ~~**Complaint detection**~~ — ✅ Implemented: keyword-based detection + inline Sí/No buttons
+3. ~~**Ticket opening via email**~~ — ✅ Implemented: `email.service.ts` + `POST /ticket` endpoint
 4. **Conversation history** — `GET /api/users/:id/conversations` (not yet implemented)
 5. **Host app userId** — replace username popup with hashed userId from host app
 6. **CEO video via CDN** — serve from bucket to swap without redeploy
