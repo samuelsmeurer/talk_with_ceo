@@ -15,7 +15,7 @@ Miniapp for El Dorado (LATAM fintech superapp) that lets users send messages dir
 ### Backend
 - **Node.js** + **TypeScript 5.9** + **Express 5**
 - **PostgreSQL** (`pg` 8.13) with connection pooling
-- **Nodemailer** for SMTP email sending (support tickets + user confirmations)
+- **Resend API** (via `fetch`) for transactional emails (support tickets + user confirmations)
 - **JWT** (`jsonwebtoken` 9.0) for admin authentication
 - **uuid** for ID generation
 - **dotenv** for environment config
@@ -65,14 +65,14 @@ talk_with_ceo/
 ```
 app/src/
   main.tsx                           # Entry — renders App or AdminApp based on /admin route
-  App.tsx                            # Orchestrator — splash → username → chat → confirm → rating → confetti
+  App.tsx                            # Orchestrator — splash → username → chat → confirm → rating → confetti → follow-up
   store.ts                           # Zustand store (mood, messages, userName, userId, conversationId)
   constants.ts                       # CEO message builders, formatFirstName, delays
   types/index.ts                     # AppState, MoodType, Message + Admin types
   index.css                          # Tailwind @theme tokens + keyframes + scrollbar
   api/
-    client.ts                        # User-facing API (users, conversations, messages, rating, tickets)
-    admin-client.ts                  # Admin API + mock mode (password '123' = offline mock data)
+    client.ts                        # User-facing API (users, conversations, messages, rating, tickets) + getMessages polling
+    admin-client.ts                  # Admin API + mock mode (password '123' = offline mock data) + sendReply
   components/
     chat/
       ConversationThread.tsx         # Scrollable area — greeting + video + engagement + final + typing
@@ -96,7 +96,7 @@ app/src/
       AdminApp.tsx                   # Admin shell — login state → dashboard or detail
       AdminLogin.tsx                 # Password login form
       AdminDashboard.tsx             # Conversation list with filters
-      ConversationDetail.tsx         # Single conversation view + CEO notes
+      ConversationDetail.tsx         # Single conversation view + CEO reply input + CEO notes
     confirmation/
       ConfettiEffect.tsx             # Yellow confetti canvas
       SupportConfirmation.tsx        # Inline Sí/No buttons (complaint flow, replaces input bar)
@@ -112,10 +112,12 @@ app/src/
     useAutoResize.ts                 # Textarea auto-grow (max 150px)
     useFirstVisit.ts                 # sessionStorage — splash only on first visit
     useUserIdentification.ts         # localStorage + POST /api/users + engagement data
+    useMessagePolling.ts             # Polls GET /messages?after= every 5s for admin CEO replies
 ```
 
 ## App Flow (Current Implementation)
 
+### New User Flow
 ```
 1.  User opens miniapp
 2.  If first visit → SplashScreen (logo + progress bar, 2.2s)
@@ -133,7 +135,7 @@ app/src/
 7.  User writes message → taps send
 8.  SendConfirmation popup: "Are you sure?" → "Yes" / "Modify"
 9.  On confirm:
-    a. POST /api/conversations → conversation_id
+    a. POST /api/conversations → conversation_id (saved to localStorage)
     b. POST /api/conversations/:id/messages {text, metadata: {mood}}
     c. User bubble appears in chat
     d. CEO typing indicator (600ms)
@@ -143,13 +145,35 @@ app/src/
 11. If complaint detected:
     a. 3-second delay → inline Sí/No buttons replace input bar
     b. "Sí, por favor" → user bubble + POST /api/conversations/:id/ticket
-       (sends 2 emails: support ticket + user confirmation)
+       (sends 2 emails via Resend: support ticket + user confirmation)
        → CEO typing → CEO "ya hablé con soporte" → rating → confetti
     c. "No, está bien" → user bubble → CEO typing
        → CEO "Listo, ya lo recibí..." → rating → confetti
     d. All messages persist as bubbles in postSendMessages array
 12. RatingPopup: 1-5 stars or skip → PATCH /api/conversations/:id/rating
-13. ConfettiEffect + final "Guille will read your message"
+13. ConfettiEffect → enables polling + follow-up mode
+```
+
+### Returning User Flow
+```
+1.  User reopens miniapp (localStorage has ceo-chat-conversation-id)
+2.  Skips splash + greeting sequence entirely
+3.  Fetches all messages: GET /api/conversations/:id/messages
+4.  ConversationThread renders in "returning" mode — all messages chronologically
+5.  If last message is from user → input locked (awaitingCeoReply = true)
+6.  If last message is from CEO → MessageInput shown for follow-up
+7.  Polling active: useMessagePolling checks every 5s for admin CEO replies
+    └─ Filters only messages with metadata.source === "admin"
+    └─ Plays received sound + unlocks input on new CEO message
+```
+
+### Follow-Up Message Flow (after rating/confetti)
+```
+1.  After confetti ends → isFollowUp = true, polling enabled
+2.  MessageInput reappears — user can send additional messages
+3.  Follow-up messages: no CEO auto-response, no rating popup
+4.  Message sent → input locks (awaitingCeoReply = true)
+5.  Polls for admin CEO reply → unlocks input when received
 ```
 
 ### Message Flow Details (`constants.ts`)
@@ -164,7 +188,9 @@ The 3 CEO text messages are built dynamically in `App.tsx` via `useMemo`:
 2. Engagement (from `engagement.message` or `DEFAULT_ENGAGEMENT_MESSAGE`)
 3. Final (static `CEO_FINAL_MESSAGE`)
 
-`ConversationThread.tsx` renders in fixed order: text[0] → video → text[1] → text[2], controlled by `visibleCount` (1-4).
+`ConversationThread.tsx` has two rendering modes:
+- **New user**: renders in fixed order text[0] → video → text[1] → text[2], controlled by `visibleCount` (1-4)
+- **Returning user** (`serverMessages` prop): renders all server messages chronologically, no greeting/video sequence
 
 ## Backend Architecture
 
@@ -181,12 +207,12 @@ api/src/
   routes/
     users.ts                         # POST /api/users (create + Redash enrichment + persist metrics)
     conversations.ts                 # POST /api/conversations + POST /:id/ticket (emails + status)
-    messages.ts                      # POST /api/conversations/:id/messages (+ complaint detection)
+    messages.ts                      # GET + POST /api/conversations/:id/messages (+ complaint detection + polling)
     rating.ts                        # PATCH /api/conversations/:id/rating
-    admin.ts                         # Login + list + messages + notes (JWT protected)
+    admin.ts                         # Login + list + messages + notes + reply (JWT protected)
   services/
     response.service.ts              # CEO response + complaint keyword detection
-    email.service.ts                 # Nodemailer SMTP: support ticket + user confirmation emails
+    email.service.ts                 # Resend API: support ticket + user confirmation emails
     redash.service.ts                # Redash Query 1464 execution (10s timeout, graceful fallback)
     engagement.service.ts            # User engagement classification + personalized messages
   middleware/
@@ -246,12 +272,14 @@ ceo_notes
 | `GET` | `/api/health` | — | Health check |
 | `POST` | `/api/users` | — | Create/identify user + Redash enrichment + persist metrics + engagement |
 | `POST` | `/api/conversations` | — | Start conversation |
+| `GET` | `/api/conversations/:id/messages` | — | Fetch messages (supports `?after=` for incremental polling) |
 | `POST` | `/api/conversations/:id/messages` | — | Send message (+ complaint detection + CEO response) |
-| `POST` | `/api/conversations/:id/ticket` | — | Create support ticket (sends emails, sets status) |
+| `POST` | `/api/conversations/:id/ticket` | — | Create support ticket (sends emails via Resend, sets status) |
 | `PATCH` | `/api/conversations/:id/rating` | — | Submit 0-5 rating |
 | `POST` | `/api/admin/login` | — | Password → JWT (24h expiry) |
 | `GET` | `/api/admin/conversations` | JWT | List conversations (filters: status, rating_min/max, limit, offset) |
 | `GET` | `/api/admin/conversations/:id/messages` | JWT | Get conversation messages |
+| `POST` | `/api/admin/conversations/:id/reply` | JWT | CEO sends reply to user (metadata: `{source: "admin"}`) |
 | `GET` | `/api/admin/conversations/:id/notes` | JWT | Get CEO notes |
 | `POST` | `/api/admin/conversations/:id/notes` | JWT | Add CEO note |
 
@@ -319,14 +347,34 @@ Rank values returned by Redash: `"Top 1%"`, `"Top 2%"`, `"Top 3%"`, `"Top 5%"`, 
 
 `POST /api/conversations/:id/ticket`:
 1. Fetches conversation, user, and last user message from DB
-2. Sends 2 emails via Nodemailer (non-blocking, won't fail request):
-   - **To `soporte@eldorado.io`**: from "Habla con Guille" with username, email, message text
-   - **To user email**: from "Guillermo - CEO de El Dorado" confirming support will reach out
+2. Sends 2 emails via Resend API (non-blocking, won't fail request):
+   - **To `soporte@eldorado.io`**: from configured `EMAIL_FROM` with username, email, message text
+   - **To user email**: from configured `EMAIL_FROM` confirming support will reach out
 3. Updates conversation status to `ticket_opened`
 4. Inserts CEO confirmation message
 5. Returns `{ ceoResponse, ticketCreated: true }`
 
+**Email guard:** If `RESEND_API_KEY` is not configured, emails are skipped with a `console.warn` (request still succeeds).
+
 Future: swap `response.service.ts` to OpenAI with Guille's personality prompt.
+
+### CEO Reply Flow (Admin → User)
+
+`POST /api/admin/conversations/:id/reply` (JWT protected):
+1. Inserts CEO message with `metadata: {"source": "admin"}`
+2. Reactivates conversation (`status = 'active'`, `updated_at = NOW()`)
+3. Returns the created message
+
+Frontend polling (`useMessagePolling`) picks up admin replies by filtering `metadata.source === "admin"`. This prevents duplicate display of auto-generated CEO responses that were already shown locally.
+
+### Message Polling (`useMessagePolling.ts`)
+
+- Polls `GET /api/conversations/:id/messages?after=<timestamp>` every 5 seconds
+- Only enabled after first message cycle completes (post-confetti) or for returning users
+- Filters server responses to only surface admin CEO replies (`metadata.source === "admin"`)
+- Deduplicates against existing messages by ID
+- Plays received sound on new messages
+- Non-critical: polling failures are silently caught
 
 ## Admin Dashboard (/admin)
 
@@ -335,7 +383,7 @@ Frontend route served from the same app. Entry point: `main.tsx` checks `window.
 **Components:**
 - `AdminLogin` — password form → `POST /api/admin/login` → JWT stored in sessionStorage
 - `AdminDashboard` — conversation list with status filters, shows user, message preview, rating, date
-- `ConversationDetail` — full message thread + CEO notes + add note form
+- `ConversationDetail` — full message thread + CEO reply input ("Responder como Guille...") + CEO notes + add note form
 
 **Mock Mode:** Password `123` activates offline mock data (5 sample conversations with threads and notes). Useful for development without backend.
 
@@ -353,11 +401,8 @@ CORS_ORIGIN=http://localhost:5173                                       # Defaul
 REDASH_BASE_URL=https://reports.eldorado.io                             # Default
 REDASH_API_KEY=                                                         # Required for Redash
 REDASH_USER_QUERY_ID=1464                                               # Default: 1464
-SMTP_HOST=smtp.gmail.com                                                # SMTP server host
-SMTP_PORT=587                                                           # Default: 587
-SMTP_USER=                                                              # SMTP auth user (email)
-SMTP_PASS=                                                              # SMTP auth password (app password)
-SMTP_FROM=Guillermo - El Dorado <email>                                 # Default display name
+RESEND_API_KEY=                                                         # Required for emails (Resend)
+EMAIL_FROM=Guillermo - El Dorado <onboarding@resend.dev>                # Default sender
 ```
 
 ### Frontend (`app/.env`)
@@ -405,7 +450,7 @@ VITE_API_URL=                  # Empty = same origin (uses Vite proxy in dev)
 - Full El Dorado design library (reference only): `assets/`
 - CEO video: `video_guille.mp4` / CEO photo: `guille.jpeg`
 
-#### Assets actively used (16 files)
+#### Assets actively used (17 files)
 - `guille.jpeg` — CEO photo (AvatarCircle)
 - `logo.svg` — El Dorado logo (SplashScreen, StatusBar)
 - `video_guille.mp4` — CEO video (VideoBubble)
@@ -413,6 +458,7 @@ VITE_API_URL=                  # Empty = same origin (uses Vite proxy in dev)
 - `tarjeta.webp`, `mj-st4.webp`, `conta-em-dolares.webp`, `p2p-optimizado.webp` — Wallpaper
 - `tarjeta-eldorado.webp`, `mj-st5.webp`, `criptos-disponibles.avif`, `mockup-usd.png` — Decoration
 - `tag-usd.svg`, `tag-cripto.svg`, `tag-p2p.svg` — Floating asset tags
+- `qr-code.png` — QR code image
 
 #### Unused assets (3 files)
 - `mockup-celular-mundo.avif`, `msg-sent-short.mp3` (0 bytes), `tag-tarjeta.svg`
@@ -423,6 +469,14 @@ These exist but are not in the main flow:
 - `MoodSelector.tsx` / `MoodPill.tsx` — mood pills (removed from footer)
 - `ProductStrip.tsx` — horizontal product marquee
 - `decoration/FloatingAssets.tsx` — floating assets for desktop
+
+## Local Storage Keys
+
+| Key | Usage |
+|-----|-------|
+| `ceo-chat-conversation-id` | Persists conversationId for returning user detection |
+| `ceo-chat-user-id` | Backend user UUID (set by `useUserIdentification`) |
+| `ceo-chat-user-name` | Display name (set by `useUserIdentification`) |
 
 ## Zustand Store (`store.ts`)
 
@@ -458,8 +512,10 @@ These exist but are not in the main flow:
 
 1. **Conversational AI** — swap `response.service.ts` to OpenAI with Guille's personality prompt
 2. ~~**Complaint detection**~~ — ✅ Implemented: keyword-based detection + inline Sí/No buttons
-3. ~~**Ticket opening via email**~~ — ✅ Implemented: `email.service.ts` + `POST /ticket` endpoint
-4. **Conversation history** — `GET /api/users/:id/conversations` (not yet implemented)
-5. **Host app userId** — replace username popup with hashed userId from host app
-6. **CEO video via CDN** — serve from bucket to swap without redeploy
-7. **Database migration runner** — migrations exist but no automated runner yet
+3. ~~**Ticket opening via email**~~ — ✅ Implemented: migrated from Nodemailer/SMTP to Resend API
+4. ~~**CEO reply from admin**~~ — ✅ Implemented: admin reply input + message polling (5s interval)
+5. ~~**Conversation continuity**~~ — ✅ Implemented: localStorage persistence + returning user flow + follow-up messages
+6. **Host app userId** — replace username popup with hashed userId from host app
+7. **CEO video via CDN** — serve from bucket to swap without redeploy
+8. **Database migration runner** — migrations exist but no automated runner yet
+9. **WebSocket for real-time** — replace 5s polling with WebSocket/SSE for instant CEO reply delivery

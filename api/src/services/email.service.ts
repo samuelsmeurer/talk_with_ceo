@@ -1,27 +1,40 @@
-import nodemailer from 'nodemailer';
 import { config } from '../config.js';
 
-const smtpOptions = {
-  host: config.smtpHost || 'smtp.gmail.com',
-  port: config.smtpPort,
-  secure: config.smtpPort === 465,
-  family: 4 as const,
-  auth: {
-    user: config.smtpUser,
-    pass: config.smtpPass,
-  },
-};
+const RESEND_API_URL = 'https://api.resend.com/emails';
 
-const transporter = nodemailer.createTransport(smtpOptions);
+async function sendEmail(params: {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<void> {
+  const res = await fetch(RESEND_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.resendApiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(params),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Resend API error ${res.status}: ${body}`);
+  }
+}
 
 export async function sendSupportTicket(
   username: string,
   userEmail: string | null,
   messageText: string,
 ): Promise<void> {
+  if (!config.resendApiKey) {
+    console.warn('RESEND_API_KEY not configured — skipping support ticket email');
+    return;
+  }
   try {
-    await transporter.sendMail({
-      from: `Habla con Guille <${config.smtpUser}>`,
+    await sendEmail({
+      from: config.emailFrom,
       to: 'soporte@eldorado.io',
       subject: `[Habla con Guille] Ticket de soporte - ${username}`,
       text: [
@@ -44,9 +57,13 @@ export async function sendUserConfirmation(
   userEmail: string,
   firstName: string,
 ): Promise<void> {
+  if (!config.resendApiKey) {
+    console.warn('RESEND_API_KEY not configured — skipping user confirmation email');
+    return;
+  }
   try {
-    await transporter.sendMail({
-      from: `Guillermo - CEO de El Dorado <${config.smtpUser}>`,
+    await sendEmail({
+      from: config.emailFrom,
       to: userEmail,
       subject: 'Guillermo de El Dorado - Ya estamos en contacto',
       text: [

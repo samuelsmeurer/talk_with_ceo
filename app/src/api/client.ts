@@ -85,6 +85,20 @@ export function createTicket(conversationId: string) {
   );
 }
 
+export interface ServerMessage {
+  id: string;
+  conversation_id: string;
+  sender: 'user' | 'ceo' | 'system';
+  text: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export function getMessages(conversationId: string, after?: string) {
+  const params = after ? `?after=${encodeURIComponent(after)}` : '';
+  return request<ServerMessage[]>(`/api/conversations/${conversationId}/messages${params}`);
+}
+
 export function rateConversation(conversationId: string, rating: number) {
   return request<{ id: string; rating: number }>(
     `/api/conversations/${conversationId}/rating`,

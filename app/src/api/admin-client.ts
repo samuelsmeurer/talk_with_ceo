@@ -198,6 +198,26 @@ export async function getNotes(conversationId: string): Promise<CeoNote[]> {
   return authRequest(`/api/admin/conversations/${conversationId}/notes`);
 }
 
+export async function sendReply(conversationId: string, text: string): Promise<AdminMessage> {
+  if (isMock()) {
+    const msg: AdminMessage = {
+      id: `m-${Date.now()}`,
+      conversation_id: conversationId,
+      sender: 'ceo',
+      text,
+      metadata: { source: 'admin' },
+      created_at: new Date().toISOString(),
+    };
+    const list = MOCK_MESSAGES[conversationId];
+    if (list) list.push(msg);
+    return msg;
+  }
+  return authRequest(`/api/admin/conversations/${conversationId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ text }),
+  });
+}
+
 export async function addNote(conversationId: string, text: string): Promise<CeoNote> {
   if (isMock()) {
     const note: CeoNote = {

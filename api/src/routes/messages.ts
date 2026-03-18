@@ -13,6 +13,27 @@ interface MessageRow {
   created_at: string;
 }
 
+// GET /api/conversations/:id/messages — fetch messages (supports ?after= for polling)
+router.get('/:id/messages', async (req, res) => {
+  const conversationId = req.params.id;
+  const after = req.query.after as string | undefined;
+
+  let sql = `SELECT id, conversation_id, sender, text, metadata, created_at
+     FROM messages
+     WHERE conversation_id = $1`;
+  const params: unknown[] = [conversationId];
+
+  if (after) {
+    sql += ` AND created_at > $2`;
+    params.push(after);
+  }
+
+  sql += ` ORDER BY created_at ASC`;
+
+  const result = await query<MessageRow>(sql, params);
+  res.status(200).json(result.rows);
+});
+
 // POST /api/conversations/:id/messages — send a message
 router.post('/:id/messages', async (req, res) => {
   const conversationId = req.params.id;

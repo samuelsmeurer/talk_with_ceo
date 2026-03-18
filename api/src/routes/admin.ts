@@ -125,6 +125,32 @@ router.get('/conversations/:id/notes', adminAuth, async (req, res) => {
   res.status(200).json(result.rows);
 });
 
+// POST /api/admin/conversations/:id/reply — CEO sends a reply to user
+router.post('/conversations/:id/reply', adminAuth, async (req, res) => {
+  const conversationId = req.params.id;
+  const { text } = req.body as { text?: string };
+
+  if (!text || typeof text !== 'string') {
+    res.status(400).json({ error: 'text is required' });
+    return;
+  }
+
+  const msg = await query<MessageRow>(
+    `INSERT INTO messages (conversation_id, sender, text, metadata)
+     VALUES ($1, 'ceo', $2, '{"source":"admin"}')
+     RETURNING *`,
+    [conversationId, text],
+  );
+
+  // Reactivate conversation
+  await query(
+    `UPDATE conversations SET status = 'active', updated_at = NOW() WHERE id = $1`,
+    [conversationId],
+  );
+
+  res.status(201).json(msg.rows[0]);
+});
+
 // POST /api/admin/conversations/:id/notes — CEO adds a comment
 router.post('/conversations/:id/notes', adminAuth, async (req, res) => {
   const conversationId = req.params.id;

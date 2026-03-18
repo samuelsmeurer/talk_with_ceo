@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getMessages, getNotes, addNote } from '../../api/admin-client';
+import { getMessages, getNotes, addNote, sendReply } from '../../api/admin-client';
 import type { AdminConversation, AdminMessage, CeoNote } from '../../types';
 
 interface ConversationDetailProps {
@@ -13,6 +13,8 @@ export function ConversationDetail({ conversation, onBack }: ConversationDetailP
   const [noteText, setNoteText] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +31,19 @@ export function ConversationDetail({ conversation, onBack }: ConversationDetailP
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const handleSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!replyText.trim() || sendingReply) return;
+    setSendingReply(true);
+    try {
+      const msg = await sendReply(conversation.id, replyText.trim());
+      setMessages((prev) => [...prev, msg]);
+      setReplyText('');
+    } finally {
+      setSendingReply(false);
+    }
+  };
 
   const handleAddNote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +128,34 @@ export function ConversationDetail({ conversation, onBack }: ConversationDetailP
                   <div ref={messagesEndRef} />
                 </div>
               </div>
+              <form onSubmit={handleSendReply} className="flex gap-2" style={{ padding: 12, borderTop: '1px solid #333333' }}>
+                <input
+                  type="text"
+                  placeholder="Responder como Guille..."
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  className="flex-1 rounded-lg text-text-primary placeholder-text-muted outline-none text-sm"
+                  style={{
+                    backgroundColor: '#1A1A1A',
+                    border: '1px solid #333333',
+                    padding: '8px 12px',
+                    fontSize: 13,
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={!replyText.trim() || sendingReply}
+                  className="rounded-lg font-medium text-sm transition-opacity disabled:opacity-40"
+                  style={{
+                    backgroundColor: '#FFFF00',
+                    color: '#0A0A0A',
+                    padding: '8px 14px',
+                    fontSize: 13,
+                  }}
+                >
+                  Enviar
+                </button>
+              </form>
             </div>
 
             {/* Notes sidebar */}

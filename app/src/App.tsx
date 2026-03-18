@@ -12,11 +12,15 @@ import { RatingPopup } from './components/confirmation/RatingPopup';
 import { useTypingSequence } from './hooks/useTypingSequence';
 import { useFirstVisit } from './hooks/useFirstVisit';
 import { useUserIdentification } from './hooks/useUserIdentification';
+import { useMessagePolling } from './hooks/useMessagePolling';
 import { useStore } from './store';
 import { playReceived, playSent } from './hooks/useSounds';
-import { startConversation, sendMessage, rateConversation, createTicket } from './api/client';
+import { startConversation, sendMessage, rateConversation, createTicket, getMessages as fetchAllMessages } from './api/client';
 import { buildGreetingMessage, DEFAULT_ENGAGEMENT_MESSAGE, CEO_FINAL_MESSAGE, CEO_CONFIRMATION_MESSAGE, TYPING_DELAYS } from './constants';
 import type { Message } from './types';
+import type { ServerMessage } from './api/client';
+
+const CONVERSATION_STORAGE_KEY = 'ceo-chat-conversation-id';
 
 const CEO_DISMISS_MESSAGE =
   '¡Listo! Ya lo recibí. Lo voy a leer personalmente. Gracias por tomarte el tiempo. Si tenés algún problema, podés escribirme de nuevo.';
@@ -36,6 +40,13 @@ export default function App() {
   const [pendingMessage, setPendingMessage] = useState('');
   const [showRating, setShowRating] = useState(false);
   const [showSupportConfirmation, setShowSupportConfirmation] = useState(false);
+  const [isReturningUser, setIsReturningUser] = useState(false);
+  const [serverMessages, setServerMessages] = useState<Message[]>([]);
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [isFollowUp, setIsFollowUp] = useState(false);
+  const [awaitingCeoReply, setAwaitingCeoReply] = useState(false);
+
+  const conversationIdRef = useRef('');
 
   const addMessage = useStore((s) => s.addMessage);
   const mood = useStore((s) => s.mood);
@@ -48,6 +59,43 @@ export default function App() {
       setUserId(userId);
     }
   }, [userId, setUserId]);
+
+  // Detect returning user — load previous conversation from localStorage
+  useEffect(() => {
+    const savedConvId = localStorage.getItem(CONVERSATION_STORAGE_KEY);
+    if (!savedConvId || !isIdentified) return;
+
+    conversationIdRef.current = savedConvId;
+    setConversationId(savedConvId);
+
+    // Fetch all messages from the server
+    fetchAllMessages(savedConvId).then((msgs) => {
+      const mapped: Message[] = msgs.map((m) => ({
+        id: m.id,
+        text: m.text,
+        sender: m.sender,
+        timestamp: m.created_at,
+      }));
+      if (mapped.length > 0) {
+        setServerMessages(mapped);
+        setIsReturningUser(true);
+        setSent(true);
+        setIsFollowUp(true);
+        setChatStarted(true);
+        setShowSplash(false);
+        setPollEnabled(true);
+        // If last message is from user, they're awaiting a CEO reply
+        const lastMsg = mapped[mapped.length - 1];
+        if (lastMsg.sender === 'user') {
+          setAwaitingCeoReply(true);
+        }
+      }
+    }).catch(() => {
+      // Failed to load — treat as new user, clear stale id
+      localStorage.removeItem(CONVERSATION_STORAGE_KEY);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIdentified]);
 
   // Build CEO messages: greeting → [video] → engagement → final
   const ceoMessages = useMemo(() => {
@@ -88,6 +136,35 @@ export default function App() {
     prevPostSendCount.current = postSendMessages.length;
   }, [postSendMessages]);
 
+  // Polling: receive CEO admin replies in real-time
+  const handleNewPolledMessages = useCallback((msgs: ServerMessage[]) => {
+    const newBubbles: Message[] = msgs.map((m) => ({
+      id: m.id,
+      text: m.text,
+      sender: m.sender,
+      timestamp: m.created_at,
+    }));
+    setPostSendMessages((prev) => {
+      // Deduplicate by id
+      const existingIds = new Set(prev.map((m) => m.id));
+      const unique = newBubbles.filter((m) => !existingIds.has(m.id));
+      return unique.length > 0 ? [...prev, ...unique] : prev;
+    });
+    // Also deduplicate against serverMessages
+    setServerMessages((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const unique = newBubbles.filter((m) => !existingIds.has(m.id));
+      return unique.length > 0 ? [...prev, ...unique] : prev;
+    });
+    if (newBubbles.length > 0) {
+      playReceived();
+      // CEO replied — unlock the input so user can respond
+      setAwaitingCeoReply(false);
+    }
+  }, []);
+
+  useMessagePolling(conversationIdRef.current, pollEnabled, handleNewPolledMessages);
+
   const handleSplashComplete = useCallback(() => {
     setShowSplash(false);
     markVisited();
@@ -115,19 +192,17 @@ export default function App() {
 
   const handleSend = useCallback(
     (text: string) => {
-      if (sent) return;
+      if (!isFollowUp && sent) return;
       setPendingMessage(text);
       setShowConfirmation(true);
     },
-    [sent]
+    [sent, isFollowUp]
   );
 
   const handleConfirmCancel = useCallback(() => {
     setShowConfirmation(false);
     setPendingMessage('');
   }, []);
-
-  const conversationIdRef = useRef('');
 
   const handleConfirmSend = useCallback(async () => {
     setShowConfirmation(false);
@@ -140,11 +215,32 @@ export default function App() {
       sender: 'user',
     };
 
+    // Follow-up: just send the message, no CEO auto-response, no rating
+    if (isFollowUp) {
+      if (isReturningUser) {
+        setServerMessages((prev) => [...prev, userMessage]);
+      } else {
+        setPostSendMessages((prev) => [...prev, userMessage]);
+      }
+      playSent();
+      // Lock input until CEO replies from admin
+      setAwaitingCeoReply(true);
+
+      try {
+        if (conversationIdRef.current) {
+          await sendMessage(conversationIdRef.current, text, { mood });
+        }
+      } catch {
+        // API failed silently
+      }
+      return;
+    }
+
+    // First message flow: CEO auto-response + complaint detection + rating
     addMessage(userMessage);
     playSent();
     setSent(true);
 
-    // Start API calls
     let ceoResponseText = CEO_CONFIRMATION_MESSAGE;
     let isComplaint = false;
 
@@ -153,6 +249,7 @@ export default function App() {
       const conversation = await startConversation(currentUserId);
       conversationIdRef.current = conversation.id;
       setConversationId(conversation.id);
+      localStorage.setItem(CONVERSATION_STORAGE_KEY, conversation.id);
 
       const result = await sendMessage(conversation.id, text, { mood });
       ceoResponseText = result.ceoResponse.text;
@@ -182,7 +279,7 @@ export default function App() {
         setShowRating(true);
       }
     }, confirmAt + 3000);
-  }, [pendingMessage, addMessage, mood, awaitRealUserId, setConversationId]);
+  }, [pendingMessage, addMessage, mood, awaitRealUserId, setConversationId, isFollowUp, isReturningUser]);
 
   const handleSupportYes = useCallback(async () => {
     setShowSupportConfirmation(false);
@@ -259,7 +356,11 @@ export default function App() {
       }
       setShowRating(false);
       setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 2000);
+      setTimeout(() => {
+        setShowConfetti(false);
+        setPollEnabled(true);
+        setIsFollowUp(true);
+      }, 2000);
     },
     []
   );
@@ -267,11 +368,15 @@ export default function App() {
   const handleSkipRating = useCallback(() => {
     setShowRating(false);
     setShowConfetti(true);
-    setTimeout(() => setShowConfetti(false), 2000);
+    setTimeout(() => {
+      setShowConfetti(false);
+      setPollEnabled(true);
+      setIsFollowUp(true);
+    }, 2000);
   }, []);
 
   return (
-    <div className="h-full w-full flex justify-center items-center" style={{ backgroundColor: '#050505' }}>
+    <div className="h-full w-full flex justify-center items-center overflow-hidden" style={{ backgroundColor: '#050505' }}>
       <div className="w-full max-w-[480px] h-full md:h-[90vh] md:max-h-[850px] flex flex-col relative md:rounded-3xl md:border md:border-border-default/30 md:shadow-2xl md:shadow-accent-primary/5 overflow-hidden" style={{ backgroundColor: '#0d0d0d' }}>
 
         {/* Splash (first visit only) */}
@@ -301,9 +406,10 @@ export default function App() {
           isTyping={isTyping}
           postSendMessages={postSendMessages}
           isConfirmationTyping={confirmationTyping}
+          serverMessages={isReturningUser ? serverMessages : undefined}
         />
 
-        {!sent && sequenceComplete && (
+        {((!sent && sequenceComplete) || (isFollowUp && !awaitingCeoReply && !showRating && !showConfirmation && !showSupportConfirmation && !showConfetti)) && (
           <MessageInput onSend={handleSend} />
         )}
 

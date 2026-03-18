@@ -17,9 +17,6 @@ export const config = {
   redashBaseUrl: process.env['REDASH_BASE_URL'] ?? 'https://reports.eldorado.io',
   redashApiKey: process.env['REDASH_API_KEY'] ?? '',
   redashUserQueryId: process.env['REDASH_USER_QUERY_ID'] ?? '1464',
-  smtpHost: process.env['SMTP_HOST'] ?? '',
-  smtpPort: parseInt(process.env['SMTP_PORT'] ?? '587', 10),
-  smtpUser: process.env['SMTP_USER'] ?? '',
-  smtpPass: process.env['SMTP_PASS'] ?? '',
-  smtpFrom: process.env['SMTP_FROM'] ?? 'Guillermo - El Dorado <guillermo@eldorado.io>',
+  resendApiKey: process.env['RESEND_API_KEY'] ?? '',
+  emailFrom: process.env['EMAIL_FROM'] ?? 'Guillermo - El Dorado <onboarding@resend.dev>',
 } as const;
