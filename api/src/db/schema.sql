@@ -27,6 +27,11 @@ CREATE TABLE conversations (
   user_id    UUID NOT NULL REFERENCES users(id),
   rating     INT CHECK (rating >= 0 AND rating <= 5),
   status     conversation_status NOT NULL DEFAULT 'active',
+  ai_category   TEXT,
+  ai_importance INTEGER,
+  ai_sentiment  TEXT,
+  ai_summary    TEXT,
+  is_favorited  BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -50,3 +55,6 @@ CREATE TABLE ceo_notes (
 CREATE INDEX idx_conversations_user_id ON conversations(user_id);
 CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
 CREATE INDEX idx_ceo_notes_conversation_id ON ceo_notes(conversation_id);
+CREATE INDEX idx_conversations_ai_category ON conversations(ai_category);
+CREATE INDEX idx_conversations_ai_importance ON conversations(ai_importance);
+CREATE INDEX idx_conversations_favorited ON conversations(is_favorited) WHERE is_favorited = true;

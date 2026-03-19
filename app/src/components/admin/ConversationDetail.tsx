@@ -7,6 +7,128 @@ interface ConversationDetailProps {
   onBack: () => void;
 }
 
+const CATEGORY_COLORS: Record<string, string> = {
+  elogio: '#00FF88',
+  sugerencia: '#4488FF',
+  reclamo: '#FF4444',
+  duda: '#FF9944',
+  bug: '#FF44FF',
+  otro: '#999999',
+};
+
+const SENTIMENT_LABELS: Record<string, { icon: string; color: string }> = {
+  positivo: { icon: '+', color: '#00FF88' },
+  neutro: { icon: '~', color: '#999999' },
+  negativo: { icon: '-', color: '#FF4444' },
+};
+
+function AnalysisBanner({ conversation }: { conversation: AdminConversation }) {
+  const { ai_category, ai_importance, ai_sentiment, ai_summary } = conversation;
+  if (!ai_category && !ai_summary) return null;
+
+  const catColor = CATEGORY_COLORS[ai_category ?? ''] ?? '#999999';
+  const sentData = SENTIMENT_LABELS[ai_sentiment ?? ''];
+  const isHighPriority = (ai_importance ?? 0) >= 4;
+
+  return (
+    <div
+      className="rounded-xl"
+      style={{
+        backgroundColor: '#111111',
+        border: '1px solid #333333',
+        padding: '12px 16px',
+        marginBottom: 16,
+      }}
+    >
+      <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: ai_summary ? 8 : 0 }}>
+        {ai_category && (
+          <span
+            className="text-xs font-medium rounded-full"
+            style={{
+              backgroundColor: `${catColor}22`,
+              color: catColor,
+              padding: '2px 10px',
+            }}
+          >
+            {ai_category}
+          </span>
+        )}
+        {ai_importance !== null && ai_importance !== undefined && (
+          <span
+            className="text-xs font-bold rounded-full"
+            style={{
+              backgroundColor: isHighPriority ? '#FF444433' : '#33333366',
+              color: isHighPriority ? '#FF4444' : '#999999',
+              padding: '2px 8px',
+            }}
+          >
+            Importancia: {ai_importance}
+          </span>
+        )}
+        {sentData && (
+          <span
+            className="text-xs font-medium"
+            style={{ color: sentData.color }}
+          >
+            {sentData.icon} {ai_sentiment}
+          </span>
+        )}
+      </div>
+      {ai_summary && (
+        <p className="text-xs text-text-secondary" style={{ lineHeight: 1.5 }}>
+          {ai_summary}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MessageAnalysisTags({ metadata }: { metadata: Record<string, unknown> | null }) {
+  const analysis = metadata?.analysis as
+    | { category?: string; importance?: number; sentiment?: string; summary?: string }
+    | undefined;
+  if (!analysis) return null;
+
+  const catColor = CATEGORY_COLORS[analysis.category ?? ''] ?? '#999999';
+  const sentData = SENTIMENT_LABELS[analysis.sentiment ?? ''];
+
+  return (
+    <div className="flex items-center gap-1 flex-wrap" style={{ marginTop: 4 }}>
+      {analysis.category && (
+        <span
+          className="rounded-full"
+          style={{
+            fontSize: 10,
+            backgroundColor: `${catColor}22`,
+            color: catColor,
+            padding: '1px 6px',
+          }}
+        >
+          {analysis.category}
+        </span>
+      )}
+      {analysis.importance !== undefined && (
+        <span
+          className="rounded-full"
+          style={{
+            fontSize: 10,
+            backgroundColor: (analysis.importance ?? 0) >= 4 ? '#FF444433' : '#33333366',
+            color: (analysis.importance ?? 0) >= 4 ? '#FF4444' : '#999999',
+            padding: '1px 6px',
+          }}
+        >
+          {analysis.importance}
+        </span>
+      )}
+      {sentData && (
+        <span style={{ fontSize: 10, color: sentData.color }}>
+          {sentData.icon}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function ConversationDetail({ conversation, onBack }: ConversationDetailProps) {
   const [messages, setMessages] = useState<AdminMessage[]>([]);
   const [notes, setNotes] = useState<CeoNote[]>([]);
@@ -70,7 +192,7 @@ export function ConversationDetail({ conversation, onBack }: ConversationDetailP
     <div className="min-h-screen" style={{ backgroundColor: '#0A0A0A' }}>
       <div className="mx-auto flex flex-col" style={{ maxWidth: 960, padding: '24px 20px', minHeight: '100vh' }}>
         {/* Header */}
-        <div className="flex items-center gap-3" style={{ marginBottom: 24 }}>
+        <div className="flex items-center gap-3" style={{ marginBottom: 16 }}>
           <button
             onClick={onBack}
             className="text-text-secondary hover:text-text-primary transition-colors text-sm"
@@ -90,6 +212,9 @@ export function ConversationDetail({ conversation, onBack }: ConversationDetailP
           )}
         </div>
 
+        {/* Analysis Banner */}
+        <AnalysisBanner conversation={conversation} />
+
         {loading ? (
           <p className="text-text-secondary text-sm">Cargando...</p>
         ) : (
@@ -105,22 +230,24 @@ export function ConversationDetail({ conversation, onBack }: ConversationDetailP
                     const isUser = msg.sender === 'user';
                     return (
                       <div key={msg.id} className={`flex ${isUser ? 'justify-end' : ''}`}>
-                        <div
-                          className="rounded-2xl"
-                          style={{
-                            maxWidth: '75%',
-                            padding: '10px 14px',
-                            fontSize: 13,
-                            lineHeight: 1.5,
-                            backgroundColor: isUser ? '#FFFF00' : '#1f1f1f',
-                            color: isUser ? '#0a0a0a' : '#ffffff',
-                            border: isUser ? 'none' : '1px solid rgba(60,60,60,0.6)',
-                          }}
-                        >
-                          <p>{msg.text}</p>
-                          <p className="text-right" style={{ fontSize: 10, marginTop: 4, opacity: 0.5 }}>
-                            {formatTime(msg.created_at)}
-                          </p>
+                        <div style={{ maxWidth: '75%' }}>
+                          <div
+                            className="rounded-2xl"
+                            style={{
+                              padding: '10px 14px',
+                              fontSize: 13,
+                              lineHeight: 1.5,
+                              backgroundColor: isUser ? '#FFFF00' : '#1f1f1f',
+                              color: isUser ? '#0a0a0a' : '#ffffff',
+                              border: isUser ? 'none' : '1px solid rgba(60,60,60,0.6)',
+                            }}
+                          >
+                            <p>{msg.text}</p>
+                            <p className="text-right" style={{ fontSize: 10, marginTop: 4, opacity: 0.5 }}>
+                              {formatTime(msg.created_at)}
+                            </p>
+                          </div>
+                          {isUser && <MessageAnalysisTags metadata={msg.metadata} />}
                         </div>
                       </div>
                     );

@@ -18,6 +18,12 @@ export interface Message {
 
 // Admin types
 
+export type AnalysisCategory = 'elogio' | 'sugerencia' | 'reclamo' | 'duda' | 'bug' | 'otro';
+export type AnalysisSentiment = 'positivo' | 'neutro' | 'negativo';
+export type ResponseStatus = 'respondida' | 'con_comentario' | 'pendiente' | 'sin_comentario';
+export type SortField = 'is_favorited' | 'external_id' | 'ai_category' | 'ai_importance' | 'ai_sentiment' | 'response_status' | 'created_at';
+export type SortDirection = 'asc' | 'desc';
+
 export interface AdminConversation {
   id: string;
   user_id: string;
@@ -26,6 +32,12 @@ export interface AdminConversation {
   rating: number | null;
   status: 'active' | 'closed' | 'ticket_opened';
   message_count: string;
+  ai_category: AnalysisCategory | null;
+  ai_importance: number | null;
+  ai_sentiment: AnalysisSentiment | null;
+  ai_summary: string | null;
+  is_favorited: boolean;
+  response_status: ResponseStatus;
   created_at: string;
   updated_at: string;
 }

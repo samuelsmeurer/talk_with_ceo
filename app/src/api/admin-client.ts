@@ -1,4 +1,4 @@
-import type { AdminConversation, AdminMessage, CeoNote } from '../types';
+import type { AdminConversation, AdminMessage, CeoNote, ResponseStatus } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'admin_token';
@@ -57,6 +57,12 @@ const MOCK_CONVERSATIONS: AdminConversation[] = [
     rating: 5,
     status: 'closed',
     message_count: '4',
+    ai_category: 'elogio',
+    ai_importance: 2,
+    ai_sentiment: 'positivo',
+    ai_summary: 'Usuario felicita la app y comparte experiencia positiva con USDT.',
+    is_favorited: true,
+    response_status: 'respondida',
     created_at: '2025-03-10T14:30:00Z',
     updated_at: '2025-03-10T14:35:00Z',
   },
@@ -68,6 +74,12 @@ const MOCK_CONVERSATIONS: AdminConversation[] = [
     rating: 3,
     status: 'active',
     message_count: '2',
+    ai_category: 'sugerencia',
+    ai_importance: 3,
+    ai_sentiment: 'neutro',
+    ai_summary: 'Pide que las transferencias P2P confirmen más rápido.',
+    is_favorited: false,
+    response_status: 'pendiente',
     created_at: '2025-03-11T09:15:00Z',
     updated_at: '2025-03-11T09:20:00Z',
   },
@@ -79,6 +91,12 @@ const MOCK_CONVERSATIONS: AdminConversation[] = [
     rating: null,
     status: 'active',
     message_count: '3',
+    ai_category: 'sugerencia',
+    ai_importance: 3,
+    ai_sentiment: 'neutro',
+    ai_summary: 'Solicita aumentar los límites de la tarjeta para uso diario.',
+    is_favorited: false,
+    response_status: 'con_comentario',
     created_at: '2025-03-11T18:00:00Z',
     updated_at: '2025-03-11T18:10:00Z',
   },
@@ -90,6 +108,12 @@ const MOCK_CONVERSATIONS: AdminConversation[] = [
     rating: 1,
     status: 'ticket_opened',
     message_count: '5',
+    ai_category: 'reclamo',
+    ai_importance: 5,
+    ai_sentiment: 'negativo',
+    ai_summary: 'Verificación de cuenta demorada 3 días, no puede acceder a su dinero.',
+    is_favorited: true,
+    response_status: 'pendiente',
     created_at: '2025-03-12T08:00:00Z',
     updated_at: '2025-03-12T08:30:00Z',
   },
@@ -101,6 +125,12 @@ const MOCK_CONVERSATIONS: AdminConversation[] = [
     rating: 4,
     status: 'closed',
     message_count: '2',
+    ai_category: 'sugerencia',
+    ai_importance: 2,
+    ai_sentiment: 'positivo',
+    ai_summary: 'Sugiere agregar staking de USDT directamente desde la app.',
+    is_favorited: false,
+    response_status: 'sin_comentario',
     created_at: '2025-03-09T20:45:00Z',
     updated_at: '2025-03-09T20:50:00Z',
   },
@@ -109,29 +139,29 @@ const MOCK_CONVERSATIONS: AdminConversation[] = [
 const MOCK_MESSAGES: Record<string, AdminMessage[]> = {
   'conv-001': [
     { id: 'm1', conversation_id: 'conv-001', sender: 'ceo', text: '¡Hola! Soy Guille, CEO de El Dorado. Contame, ¿en qué puedo ayudarte?', metadata: null, created_at: '2025-03-10T14:30:00Z' },
-    { id: 'm2', conversation_id: 'conv-001', sender: 'user', text: 'Guille, genio! Quería decirte que la app está increíble. Compré USDT por primera vez y fue re fácil. Abrazo grande desde Córdoba.', metadata: { mood: 'positive' }, created_at: '2025-03-10T14:31:00Z' },
+    { id: 'm2', conversation_id: 'conv-001', sender: 'user', text: 'Guille, genio! Quería decirte que la app está increíble. Compré USDT por primera vez y fue re fácil. Abrazo grande desde Córdoba.', metadata: { mood: 'positive', analysis: { category: 'elogio', importance: 2, sentiment: 'positivo', summary: 'Usuario felicita la app y comparte experiencia positiva con USDT.' } }, created_at: '2025-03-10T14:31:00Z' },
     { id: 'm3', conversation_id: 'conv-001', sender: 'ceo', text: '¡Gracias por tu mensaje! Lo voy a leer personalmente. 💛', metadata: null, created_at: '2025-03-10T14:31:30Z' },
     { id: 'm4', conversation_id: 'conv-001', sender: 'user', text: 'Dale, seguí así! 🚀', metadata: null, created_at: '2025-03-10T14:32:00Z' },
   ],
   'conv-002': [
     { id: 'm5', conversation_id: 'conv-002', sender: 'ceo', text: '¡Hola! Soy Guille, CEO de El Dorado. Contame, ¿en qué puedo ayudarte?', metadata: null, created_at: '2025-03-11T09:15:00Z' },
-    { id: 'm6', conversation_id: 'conv-002', sender: 'user', text: 'Hola Guille, estaría bueno poder hacer transferencias P2P más rápido. A veces tarda bastante en confirmar.', metadata: { mood: 'idea' }, created_at: '2025-03-11T09:17:00Z' },
+    { id: 'm6', conversation_id: 'conv-002', sender: 'user', text: 'Hola Guille, estaría bueno poder hacer transferencias P2P más rápido. A veces tarda bastante en confirmar.', metadata: { mood: 'idea', analysis: { category: 'sugerencia', importance: 3, sentiment: 'neutro', summary: 'Pide que las transferencias P2P confirmen más rápido.' } }, created_at: '2025-03-11T09:17:00Z' },
   ],
   'conv-003': [
     { id: 'm7', conversation_id: 'conv-003', sender: 'ceo', text: '¡Hola! Soy Guille, CEO de El Dorado. Contame, ¿en qué puedo ayudarte?', metadata: null, created_at: '2025-03-11T18:00:00Z' },
-    { id: 'm8', conversation_id: 'conv-003', sender: 'user', text: 'Che Guille, me encanta la tarjeta pero los límites son muy bajos para uso diario. ¿Se pueden subir?', metadata: { mood: 'talk' }, created_at: '2025-03-11T18:02:00Z' },
+    { id: 'm8', conversation_id: 'conv-003', sender: 'user', text: 'Che Guille, me encanta la tarjeta pero los límites son muy bajos para uso diario. ¿Se pueden subir?', metadata: { mood: 'talk', analysis: { category: 'sugerencia', importance: 3, sentiment: 'neutro', summary: 'Solicita aumentar los límites de la tarjeta para uso diario.' } }, created_at: '2025-03-11T18:02:00Z' },
     { id: 'm9', conversation_id: 'conv-003', sender: 'ceo', text: '¡Gracias por tu mensaje! Lo voy a leer personalmente. 💛', metadata: null, created_at: '2025-03-11T18:02:30Z' },
   ],
   'conv-004': [
     { id: 'm10', conversation_id: 'conv-004', sender: 'ceo', text: '¡Hola! Soy Guille, CEO de El Dorado. Contame, ¿en qué puedo ayudarte?', metadata: null, created_at: '2025-03-12T08:00:00Z' },
-    { id: 'm11', conversation_id: 'conv-004', sender: 'user', text: 'Guille, hace 3 días que estoy esperando que me verifiquen la cuenta y nadie me responde. Necesito acceder a mi plata YA.', metadata: { mood: 'frustrated' }, created_at: '2025-03-12T08:05:00Z' },
+    { id: 'm11', conversation_id: 'conv-004', sender: 'user', text: 'Guille, hace 3 días que estoy esperando que me verifiquen la cuenta y nadie me responde. Necesito acceder a mi plata YA.', metadata: { mood: 'frustrated', analysis: { category: 'reclamo', importance: 5, sentiment: 'negativo', summary: 'Verificación de cuenta demorada 3 días, no puede acceder a su dinero.' } }, created_at: '2025-03-12T08:05:00Z' },
     { id: 'm12', conversation_id: 'conv-004', sender: 'ceo', text: '¡Gracias por tu mensaje! Lo voy a leer personalmente. 💛', metadata: null, created_at: '2025-03-12T08:05:30Z' },
     { id: 'm13', conversation_id: 'conv-004', sender: 'user', text: 'Espero que sea verdad porque ya mandé 4 mails y nada.', metadata: null, created_at: '2025-03-12T08:10:00Z' },
     { id: 'm14', conversation_id: 'conv-004', sender: 'user', text: 'Actualización: me respondieron recién. Gracias igual.', metadata: null, created_at: '2025-03-12T08:30:00Z' },
   ],
   'conv-005': [
     { id: 'm15', conversation_id: 'conv-005', sender: 'ceo', text: '¡Hola! Soy Guille, CEO de El Dorado. Contame, ¿en qué puedo ayudarte?', metadata: null, created_at: '2025-03-09T20:45:00Z' },
-    { id: 'm16', conversation_id: 'conv-005', sender: 'user', text: 'Quería sugerirte que agreguen staking de USDT directo desde la app. Sería un golazo.', metadata: { mood: 'idea' }, created_at: '2025-03-09T20:47:00Z' },
+    { id: 'm16', conversation_id: 'conv-005', sender: 'user', text: 'Quería sugerirte que agreguen staking de USDT directo desde la app. Sería un golazo.', metadata: { mood: 'idea', analysis: { category: 'sugerencia', importance: 2, sentiment: 'positivo', summary: 'Sugiere agregar staking de USDT directamente desde la app.' } }, created_at: '2025-03-09T20:47:00Z' },
   ],
 };
 
@@ -172,20 +202,46 @@ export async function adminLogin(password: string): Promise<void> {
 
 export async function getConversations(filters?: {
   status?: string;
+  category?: string;
+  importance_min?: number;
+  sentiment?: string;
+  favorited?: boolean;
+  response_status?: ResponseStatus;
   limit?: number;
   offset?: number;
 }): Promise<AdminConversation[]> {
   if (isMock()) {
-    let data = MOCK_CONVERSATIONS;
+    let data = [...MOCK_CONVERSATIONS];
     if (filters?.status) data = data.filter((c) => c.status === filters.status);
+    if (filters?.category) data = data.filter((c) => c.ai_category === filters.category);
+    if (filters?.importance_min) data = data.filter((c) => (c.ai_importance ?? 0) >= filters.importance_min!);
+    if (filters?.sentiment) data = data.filter((c) => c.ai_sentiment === filters.sentiment);
+    if (filters?.favorited) data = data.filter((c) => c.is_favorited);
+    if (filters?.response_status) data = data.filter((c) => c.response_status === filters.response_status);
     return data;
   }
   const params = new URLSearchParams();
   if (filters?.status) params.set('status', filters.status);
+  if (filters?.category) params.set('category', filters.category);
+  if (filters?.importance_min) params.set('importance_min', String(filters.importance_min));
+  if (filters?.sentiment) params.set('sentiment', filters.sentiment);
+  if (filters?.favorited) params.set('favorited', 'true');
+  if (filters?.response_status) params.set('response_status', filters.response_status);
   if (filters?.limit) params.set('limit', String(filters.limit));
   if (filters?.offset) params.set('offset', String(filters.offset));
   const qs = params.toString();
   return authRequest(`/api/admin/conversations${qs ? `?${qs}` : ''}`);
+}
+
+export async function toggleFavorite(conversationId: string): Promise<{ id: string; is_favorited: boolean }> {
+  if (isMock()) {
+    const conv = MOCK_CONVERSATIONS.find((c) => c.id === conversationId);
+    if (conv) conv.is_favorited = !conv.is_favorited;
+    return { id: conversationId, is_favorited: conv?.is_favorited ?? false };
+  }
+  return authRequest(`/api/admin/conversations/${conversationId}/favorite`, {
+    method: 'PATCH',
+  });
 }
 
 export async function getMessages(conversationId: string): Promise<AdminMessage[]> {
