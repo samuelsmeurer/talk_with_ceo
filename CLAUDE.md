@@ -538,3 +538,5 @@ These exist but are not in the main flow:
 9. **WebSocket for real-time** — replace 5s polling with WebSocket/SSE for instant CEO reply delivery
 10. ~~**Admin dashboard table layout**~~ — ✅ Implemented: tabular view with 7 sortable columns, favorites, response_status derived via CTE, client-side sorting
 11. ~~**AI message analysis**~~ — ✅ Implemented: OpenAI gpt-4o-mini classifies messages (category, importance 1-5, sentiment, summary) via `analysis.service.ts`
+12. **AI-driven complaint detection** — Replace keyword-based complaint detection with AI analysis results. Make `analyzeMessage` synchronous (awaited, 3s timeout) and use `category === 'reclamo' || 'bug'` to trigger the support ticket offer flow. Fall back to keyword detection if AI fails/times out. Files: `analysis.service.ts` (return analysis result), `messages.ts` (await + timeout + use result), `response.service.ts` (accept override param)
+13. **Custom email domain** — Verify `eldorado.io` domain in Resend to send emails as `guille@eldorado.io` instead of `onboarding@resend.dev`. Requires DNS records (SPF, DKIM) added by infra team
