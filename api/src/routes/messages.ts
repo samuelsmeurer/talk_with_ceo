@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db/client.js';
 import { generateResponse } from '../services/response.service.js';
+import { analyzeMessage } from '../services/analysis.service.js';
 
 const router = Router();
 
@@ -63,6 +64,9 @@ router.post('/:id/messages', async (req, res) => {
   let complaintDetected = false;
 
   if (sender === 'user') {
+    // Fire-and-forget AI analysis (never blocks user response)
+    analyzeMessage(userMsg.rows[0].id, text).catch(() => {});
+
     const result = await generateResponse(conversationId, text);
     complaintDetected = result.complaintDetected;
 

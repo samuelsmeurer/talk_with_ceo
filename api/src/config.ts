@@ -19,4 +19,5 @@ export const config = {
   redashUserQueryId: process.env['REDASH_USER_QUERY_ID'] ?? '1464',
   resendApiKey: process.env['RESEND_API_KEY'] ?? '',
   emailFrom: process.env['EMAIL_FROM'] ?? 'Guillermo - El Dorado <onboarding@resend.dev>',
+  openaiApiKey: process.env['OPENAI_API_KEY'] ?? '',
 } as const;
