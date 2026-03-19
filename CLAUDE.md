@@ -68,11 +68,11 @@ app/src/
   App.tsx                            # Orchestrator — splash → username → chat → confirm → rating → confetti → follow-up
   store.ts                           # Zustand store (mood, messages, userName, userId, conversationId)
   constants.ts                       # CEO message builders, formatFirstName, delays
-  types/index.ts                     # AppState, MoodType, Message + Admin types
+  types/index.ts                     # AppState, MoodType, Message + Admin types (ResponseStatus, SortField, SortDirection)
   index.css                          # Tailwind @theme tokens + keyframes + scrollbar
   api/
     client.ts                        # User-facing API (users, conversations, messages, rating, tickets) + getMessages polling
-    admin-client.ts                  # Admin API + mock mode (password '123' = offline mock data) + sendReply
+    admin-client.ts                  # Admin API + mock mode (password '123' = offline mock data) + sendReply + toggleFavorite
   components/
     chat/
       ConversationThread.tsx         # Scrollable area — greeting + video + engagement + final + typing
@@ -95,7 +95,7 @@ app/src/
     admin/
       AdminApp.tsx                   # Admin shell — login state → dashboard or detail
       AdminLogin.tsx                 # Password login form
-      AdminDashboard.tsx             # Conversation list with filters
+      AdminDashboard.tsx             # Tabular view with sortable columns, filters, favorites
       ConversationDetail.tsx         # Single conversation view + CEO reply input + CEO notes
     confirmation/
       ConfettiEffect.tsx             # Yellow confetti canvas
@@ -204,6 +204,8 @@ api/src/
     migrations/
       001_add_first_name.sql         # Adds first_name column to users
       002_add_user_metrics.sql       # Adds Redash metrics + engagement columns to users
+      003_add_ai_analysis.sql        # Adds AI analysis columns to conversations
+      004_add_favorites.sql          # Adds is_favorited boolean + partial index to conversations
   routes/
     users.ts                         # POST /api/users (create + Redash enrichment + persist metrics)
     conversations.ts                 # POST /api/conversations + POST /:id/ticket (emails + status)
@@ -247,6 +249,11 @@ conversations
   user_id         UUID FK → users
   rating          INT nullable   ← 0-5, user can skip
   status          ENUM           ← 'active' | 'closed' | 'ticket_opened'
+  ai_category     TEXT nullable   ← 'elogio' | 'sugerencia' | 'reclamo' | 'duda' | 'bug' | 'otro'
+  ai_importance   INTEGER nullable ← 1-5
+  ai_sentiment    TEXT nullable   ← 'positivo' | 'neutro' | 'negativo'
+  ai_summary      TEXT nullable   ← AI-generated one-line summary
+  is_favorited    BOOLEAN         ← default false, toggled by admin
   created_at      TIMESTAMPTZ
   updated_at      TIMESTAMPTZ
 
@@ -277,9 +284,10 @@ ceo_notes
 | `POST` | `/api/conversations/:id/ticket` | — | Create support ticket (sends emails via Resend, sets status) |
 | `PATCH` | `/api/conversations/:id/rating` | — | Submit 0-5 rating |
 | `POST` | `/api/admin/login` | — | Password → JWT (24h expiry) |
-| `GET` | `/api/admin/conversations` | JWT | List conversations (filters: status, rating_min/max, limit, offset) |
+| `GET` | `/api/admin/conversations` | JWT | List conversations (filters: status, rating_min/max, category, importance_min, sentiment, favorited, response_status, limit, offset) |
 | `GET` | `/api/admin/conversations/:id/messages` | JWT | Get conversation messages |
 | `POST` | `/api/admin/conversations/:id/reply` | JWT | CEO sends reply to user (metadata: `{source: "admin"}`) |
+| `PATCH` | `/api/admin/conversations/:id/favorite` | JWT | Toggle `is_favorited` boolean |
 | `GET` | `/api/admin/conversations/:id/notes` | JWT | Get CEO notes |
 | `POST` | `/api/admin/conversations/:id/notes` | JWT | Add CEO note |
 
@@ -382,12 +390,20 @@ Frontend route served from the same app. Entry point: `main.tsx` checks `window.
 
 **Components:**
 - `AdminLogin` — password form → `POST /api/admin/login` → JWT stored in sessionStorage
-- `AdminDashboard` — conversation list with status filters, shows user, message preview, rating, date
+- `AdminDashboard` — tabular view with 7 sortable columns (★, Usuario, Tema, Imp., Sentimiento, Estado, Fecha)
 - `ConversationDetail` — full message thread + CEO reply input ("Responder como Guille...") + CEO notes + add note form
 
-**Mock Mode:** Password `123` activates offline mock data (5 sample conversations with threads and notes). Useful for development without backend.
+**Dashboard table layout:**
+- Columns: Favorite star (toggle), User (name + email), Tema (category badge with tooltip for ai_summary), Importancia (numeric badge, red if >=4), Sentimiento (+/~/- colored), Estado (derived response_status badge), Fecha
+- Client-side sorting: click column header to toggle asc/desc, yellow ▲/▼ indicator on active column
+- Response status (`response_status`): derived server-side via CTE — `respondida` (admin replied), `con_comentario` (has CEO note), `pendiente` (last msg from user), `sin_comentario` (none)
+- Filters: Status (active/closed/ticket), Categoría, Importancia (4+/5), Estado (response_status), Solo favoritos toggle
+- Favorites: optimistic UI update on star click, PATCH to backend in background, revert on failure
+- Container max-width: 1200px
 
-**Admin API client** (`admin-client.ts`): All calls check `sessionStorage('admin_mock')` — if true, returns hardcoded data instead of calling backend.
+**Mock Mode:** Password `123` activates offline mock data (5 sample conversations with threads, notes, favorites, and response_status). Useful for development without backend.
+
+**Admin API client** (`admin-client.ts`): All calls check `sessionStorage('admin_mock')` — if true, returns hardcoded data instead of calling backend. Exports: `adminLogin`, `getConversations`, `toggleFavorite`, `getMessages`, `getNotes`, `sendReply`, `addNote`.
 
 ## Environment Variables
 
@@ -403,6 +419,7 @@ REDASH_API_KEY=                                                         # Requir
 REDASH_USER_QUERY_ID=1464                                               # Default: 1464
 RESEND_API_KEY=                                                         # Required for emails (Resend)
 EMAIL_FROM=Guillermo - El Dorado <onboarding@resend.dev>                # Default sender
+OPENAI_API_KEY=                                                         # Required for AI message analysis (gpt-4o-mini)
 ```
 
 ### Frontend (`app/.env`)
@@ -435,7 +452,7 @@ VITE_API_URL=                  # Empty = same origin (uses Vite proxy in dev)
 ### CSS/Tailwind
 - **Tailwind v4**: use `@theme` in `index.css` for custom tokens, not `tailwind.config`
 - **Inline styles for critical layout**: padding, max-width, and font-size in bubbles use inline styles (not Tailwind classes) because arbitrary values may not apply correctly with HMR
-- **Container**: max-w-[480px] centered, simulating a mobile screen on desktop
+- **Container**: max-w-[480px] centered for chat, max-w-[1200px] for admin dashboard
 
 ### Components
 - **Language**: All copy in Argentine Spanish (vos, escribi, contame)
@@ -519,3 +536,5 @@ These exist but are not in the main flow:
 7. **CEO video via CDN** — serve from bucket to swap without redeploy
 8. **Database migration runner** — migrations exist but no automated runner yet
 9. **WebSocket for real-time** — replace 5s polling with WebSocket/SSE for instant CEO reply delivery
+10. ~~**Admin dashboard table layout**~~ — ✅ Implemented: tabular view with 7 sortable columns, favorites, response_status derived via CTE, client-side sorting
+11. ~~**AI message analysis**~~ — ✅ Implemented: OpenAI gpt-4o-mini classifies messages (category, importance 1-5, sentiment, summary) via `analysis.service.ts`
