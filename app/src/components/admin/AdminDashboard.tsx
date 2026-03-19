@@ -168,7 +168,6 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
     onClick: () => void,
     activeColor = '#FFFF00',
     activeBg = '#FFFF00',
-    activeText = '#0A0A0A',
   ) => (
     <button
       key={value}
