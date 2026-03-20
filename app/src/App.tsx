@@ -251,6 +251,13 @@ export default function App() {
       setConversationId(conversation.id);
       localStorage.setItem(CONVERSATION_STORAGE_KEY, conversation.id);
 
+      // Persist initial CEO greeting messages so returning users see the full conversation
+      if (conversation.isNew) {
+        for (const msg of ceoMessages) {
+          await persistMessage(conversation.id, 'ceo', msg.text);
+        }
+      }
+
       const result = await sendMessage(conversation.id, text, { mood });
       ceoResponseText = result.ceoResponse.text;
       isComplaint = result.complaintDetected;
@@ -279,7 +286,7 @@ export default function App() {
         setShowRating(true);
       }
     }, confirmAt + 3000);
-  }, [pendingMessage, addMessage, mood, awaitRealUserId, setConversationId, isFollowUp, isReturningUser]);
+  }, [pendingMessage, addMessage, mood, awaitRealUserId, setConversationId, isFollowUp, isReturningUser, ceoMessages]);
 
   const handleSupportYes = useCallback(async () => {
     setShowSupportConfirmation(false);

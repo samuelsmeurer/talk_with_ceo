@@ -45,7 +45,7 @@ router.post('/', async (req, res) => {
   );
 
   if (existing.rows.length > 0) {
-    res.status(200).json(existing.rows[0]);
+    res.status(200).json({ ...existing.rows[0], isNew: false });
     return;
   }
 
@@ -54,7 +54,7 @@ router.post('/', async (req, res) => {
     [user_id],
   );
 
-  res.status(201).json(result.rows[0]);
+  res.status(201).json({ ...result.rows[0], isNew: true });
 });
 
 // POST /api/conversations/:id/ticket — create support ticket

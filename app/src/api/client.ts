@@ -47,7 +47,7 @@ export function createOrIdentifyUser(externalId: string, email?: string) {
 }
 
 export function startConversation(userId: string) {
-  return request<{ id: string; user_id: string; status: string }>(
+  return request<{ id: string; user_id: string; status: string; isNew: boolean }>(
     '/api/conversations',
     {
       method: 'POST',
