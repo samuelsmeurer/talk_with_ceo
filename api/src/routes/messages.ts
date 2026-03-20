@@ -5,6 +5,13 @@ import { analyzeMessage } from '../services/analysis.service.js';
 
 const router = Router();
 
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 interface MessageRow {
   id: string;
   conversation_id: string;
@@ -64,10 +71,10 @@ router.post('/:id/messages', async (req, res) => {
   let complaintDetected = false;
 
   if (sender === 'user') {
-    // Fire-and-forget AI analysis (never blocks user response)
-    analyzeMessage(userMsg.rows[0].id, text).catch(() => {});
+    // AI analysis with 3s timeout — drives complaint detection, falls back to keywords
+    const analysis = await withTimeout(analyzeMessage(userMsg.rows[0].id, text), 3000).catch(() => null);
 
-    const result = await generateResponse(conversationId, text);
+    const result = await generateResponse(conversationId, text, { aiCategory: analysis?.category });
     complaintDetected = result.complaintDetected;
 
     const ceoResult = await query<MessageRow>(

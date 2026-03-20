@@ -31,10 +31,17 @@ Guía de categorías:
 - bug: reporta un error técnico específico
 - otro: no encaja en ninguna categoría`;
 
-export async function analyzeMessage(messageId: string, userText: string): Promise<void> {
+export interface AnalysisResult {
+  category: string;
+  importance: number;
+  sentiment: string;
+  summary: string;
+}
+
+export async function analyzeMessage(messageId: string, userText: string): Promise<AnalysisResult | null> {
   if (!config.openaiApiKey) {
     console.warn('OPENAI_API_KEY not configured — skipping message analysis');
-    return;
+    return null;
   }
 
   try {
@@ -51,14 +58,14 @@ export async function analyzeMessage(messageId: string, userText: string): Promi
     });
 
     const content = response.choices[0]?.message?.content?.trim();
-    if (!content) return;
+    if (!content) return null;
 
     let parsed: { category?: string; importance?: number; sentiment?: string; summary?: string };
     try {
       parsed = JSON.parse(content);
     } catch {
       console.warn('Analysis returned invalid JSON:', content);
-      return;
+      return null;
     }
 
     // Sanitize
@@ -91,7 +98,9 @@ export async function analyzeMessage(messageId: string, userText: string): Promi
     );
 
     console.log(`Message ${messageId} analyzed: ${category} (${importance}) ${sentiment}`);
+    return analysis;
   } catch (err) {
     console.error('Message analysis failed:', err);
+    return null;
   }
 }

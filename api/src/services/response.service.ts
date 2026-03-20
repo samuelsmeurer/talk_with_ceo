@@ -34,8 +34,12 @@ export interface CeoResponseResult {
 export async function generateResponse(
   _conversationId: string,
   userText: string,
+  options?: { aiCategory?: string },
 ): Promise<CeoResponseResult> {
-  const complaintDetected = detectComplaint(userText);
+  const complaintDetected =
+    options?.aiCategory !== undefined
+      ? options.aiCategory === 'reclamo' || options.aiCategory === 'bug'
+      : detectComplaint(userText);
   return {
     text: complaintDetected ? CEO_COMPLAINT_MESSAGE : CEO_CONFIRMATION_MESSAGE,
     complaintDetected,
