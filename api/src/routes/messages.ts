@@ -70,7 +70,7 @@ router.post('/:id/messages', async (req, res) => {
   let ceoResponse: MessageRow | undefined;
   let complaintDetected = false;
 
-  if (sender === 'user') {
+  if (sender === 'user' && !(metadata as Record<string, unknown> | undefined)?.skipAutoResponse) {
     // AI analysis with 3s timeout — drives complaint detection, falls back to keywords
     const analysis = await withTimeout(analyzeMessage(userMsg.rows[0].id, text), 3000).catch(() => null);
 

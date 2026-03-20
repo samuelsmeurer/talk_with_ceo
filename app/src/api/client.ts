@@ -85,6 +85,20 @@ export function createTicket(conversationId: string) {
   );
 }
 
+export function persistMessage(
+  conversationId: string,
+  sender: 'user' | 'ceo' | 'system',
+  text: string,
+) {
+  return request<{ userMessage: ServerMessage }>(
+    `/api/conversations/${conversationId}/messages`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ sender, text, metadata: { skipAutoResponse: true } }),
+    },
+  );
+}
+
 export interface ServerMessage {
   id: string;
   conversation_id: string;

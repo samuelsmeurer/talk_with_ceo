@@ -15,7 +15,7 @@ import { useUserIdentification } from './hooks/useUserIdentification';
 import { useMessagePolling } from './hooks/useMessagePolling';
 import { useStore } from './store';
 import { playReceived, playSent } from './hooks/useSounds';
-import { startConversation, sendMessage, rateConversation, createTicket, getMessages as fetchAllMessages } from './api/client';
+import { startConversation, sendMessage, rateConversation, createTicket, persistMessage, getMessages as fetchAllMessages } from './api/client';
 import { buildGreetingMessage, DEFAULT_ENGAGEMENT_MESSAGE, CEO_FINAL_MESSAGE, CEO_CONFIRMATION_MESSAGE, TYPING_DELAYS } from './constants';
 import type { Message } from './types';
 import type { ServerMessage } from './api/client';
@@ -291,6 +291,11 @@ export default function App() {
     ]);
     playSent();
 
+    // Persist user choice to DB
+    if (conversationIdRef.current) {
+      persistMessage(conversationIdRef.current, 'user', 'Sí, por favor').catch(() => {});
+    }
+
     let ceoText =
       '¡Listo! Ya hablé con el equipo de soporte, se van a comunicar con vos en los próximos minutos.';
 
@@ -329,6 +334,11 @@ export default function App() {
     ]);
     playSent();
 
+    // Persist user choice to DB
+    if (conversationIdRef.current) {
+      persistMessage(conversationIdRef.current, 'user', 'No, está bien').catch(() => {});
+    }
+
     // Show typing then dismiss bubble
     setConfirmationTyping(true);
 
@@ -338,6 +348,11 @@ export default function App() {
         ...prev,
         { id: 'ceo-dismiss', text: CEO_DISMISS_MESSAGE, sender: 'ceo' },
       ]);
+
+      // Persist CEO dismiss to DB
+      if (conversationIdRef.current) {
+        persistMessage(conversationIdRef.current, 'ceo', CEO_DISMISS_MESSAGE).catch(() => {});
+      }
     }, TYPING_DELAYS.typingDuration);
 
     setTimeout(() => {
