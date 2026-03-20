@@ -29,12 +29,23 @@ interface MessageRow {
   created_at: string;
 }
 
-// POST /api/conversations — start a new conversation
+// POST /api/conversations — start or reuse conversation
 router.post('/', async (req, res) => {
   const { user_id } = req.body as { user_id?: string };
 
   if (!user_id || typeof user_id !== 'string') {
     res.status(400).json({ error: 'user_id is required' });
+    return;
+  }
+
+  // Reuse existing conversation if one exists for this user
+  const existing = await query<ConversationRow>(
+    `SELECT * FROM conversations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [user_id],
+  );
+
+  if (existing.rows.length > 0) {
+    res.status(200).json(existing.rows[0]);
     return;
   }
 
