@@ -21,7 +21,7 @@ export interface Message {
 export type AnalysisCategory = 'elogio' | 'sugerencia' | 'reclamo' | 'duda' | 'bug' | 'otro';
 export type AnalysisSentiment = 'positivo' | 'neutro' | 'negativo';
 export type ResponseStatus = 'respondida' | 'con_comentario' | 'pendiente' | 'sin_comentario';
-export type SortField = 'is_favorited' | 'external_id' | 'ai_category' | 'ai_importance' | 'ai_sentiment' | 'response_status' | 'created_at';
+export type SortField = 'is_favorited' | 'external_id' | 'ai_category' | 'ai_importance' | 'ai_sentiment' | 'response_status' | 'status' | 'created_at';
 export type SortDirection = 'asc' | 'desc';
 
 export interface AdminConversation {

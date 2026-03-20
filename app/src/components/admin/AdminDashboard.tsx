@@ -9,8 +9,6 @@ interface AdminDashboardProps {
 
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos' },
-  { value: 'active', label: 'Activos' },
-  { value: 'closed', label: 'Cerrados' },
   { value: 'ticket_opened', label: 'Ticket' },
 ];
 
@@ -26,7 +24,10 @@ const CATEGORY_OPTIONS: { value: AnalysisCategory | ''; label: string; color: st
 
 const IMPORTANCE_OPTIONS = [
   { value: 0, label: 'Todas' },
-  { value: 4, label: '4+' },
+  { value: 1, label: '1' },
+  { value: 2, label: '2' },
+  { value: 3, label: '3' },
+  { value: 4, label: '4' },
   { value: 5, label: '5' },
 ];
 
@@ -34,7 +35,6 @@ const RESPONSE_STATUS_OPTIONS: { value: ResponseStatus | ''; label: string }[] =
   { value: '', label: 'Todos' },
   { value: 'respondida', label: 'Respondida' },
   { value: 'con_comentario', label: 'Con comentario' },
-  { value: 'pendiente', label: 'Pendiente' },
   { value: 'sin_comentario', label: 'Sin comentario' },
 ];
 
@@ -80,6 +80,7 @@ const SORT_COMPARATORS: Record<SortField, (a: AdminConversation, b: AdminConvers
   ai_importance: (a, b) => (a.ai_importance ?? 0) - (b.ai_importance ?? 0),
   ai_sentiment: (a, b) => (a.ai_sentiment ?? '').localeCompare(b.ai_sentiment ?? ''),
   response_status: (a, b) => a.response_status.localeCompare(b.response_status),
+  status: (a, b) => a.status.localeCompare(b.status),
   created_at: (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
 };
 
@@ -127,14 +128,12 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
   const handleToggleFavorite = useCallback(async (e: React.MouseEvent, conv: AdminConversation) => {
     e.stopPropagation();
     const prevValue = conv.is_favorited;
-    // Optimistic update
     setConversations((prev) =>
       prev.map((c) => (c.id === conv.id ? { ...c, is_favorited: !c.is_favorited } : c)),
     );
     try {
       await toggleFavorite(conv.id);
     } catch {
-      // Revert on failure
       setConversations((prev) =>
         prev.map((c) => (c.id === conv.id ? { ...c, is_favorited: prevValue } : c)),
       );
@@ -161,24 +160,23 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
     return <span style={{ color: '#FFFF00', marginLeft: 4 }}>{sortDirection === 'asc' ? '▲' : '▼'}</span>;
   };
 
-  const renderFilterButton = (
+  const renderPill = (
     value: string,
     current: string,
     label: string,
     onClick: () => void,
     activeColor = '#FFFF00',
-    activeBg = '#FFFF00',
   ) => (
     <button
       key={value}
       onClick={onClick}
-      className="text-xs rounded-full transition-colors"
+      className="text-xs rounded-full transition-all"
       style={{
-        padding: '3px 10px',
-        backgroundColor: current === value ? `${activeBg}33` : 'transparent',
-        color: current === value ? activeColor : '#666666',
+        padding: '4px 12px',
+        backgroundColor: current === value ? `${activeColor}20` : 'transparent',
+        color: current === value ? activeColor : '#555555',
         border: '1px solid',
-        borderColor: current === value ? `${activeColor}66` : '#33333366',
+        borderColor: current === value ? `${activeColor}44` : '#ffffff0a',
       }}
     >
       {label}
@@ -202,94 +200,87 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
           </button>
         </div>
 
-        {/* Status Filters */}
-        <div className="flex gap-2" style={{ marginBottom: 10 }}>
-          {STATUS_OPTIONS.map((opt) => (
+        {/* Filters Card */}
+        <div
+          style={{
+            backgroundColor: '#111111',
+            border: '1px solid #1f1f1f',
+            borderRadius: 12,
+            padding: '16px 20px',
+            marginBottom: 20,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}
+        >
+          {/* Row 1: Status + Category */}
+          <div className="flex flex-wrap items-center gap-5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium" style={{ color: '#555555', minWidth: 48 }}>Status</span>
+              <div className="flex gap-1">
+                {STATUS_OPTIONS.map((opt) =>
+                  renderPill(opt.value, statusFilter, opt.label, () => setStatusFilter(opt.value)),
+                )}
+              </div>
+            </div>
+
+            <div style={{ width: 1, height: 20, backgroundColor: '#1f1f1f' }} />
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium" style={{ color: '#555555' }}>Categoría</span>
+              <div className="flex gap-1">
+                {CATEGORY_OPTIONS.map((opt) =>
+                  renderPill(opt.value, categoryFilter, opt.label, () => setCategoryFilter(opt.value), opt.color),
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2: Importance + Estado + Favoritos */}
+          <div className="flex flex-wrap items-center gap-5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium" style={{ color: '#555555', minWidth: 48 }}>Imp.</span>
+              <div className="flex gap-1">
+                {IMPORTANCE_OPTIONS.map((opt) =>
+                  renderPill(
+                    String(opt.value),
+                    String(importanceMin),
+                    opt.label,
+                    () => setImportanceMin(opt.value),
+                    '#FF4444',
+                  ),
+                )}
+              </div>
+            </div>
+
+            <div style={{ width: 1, height: 20, backgroundColor: '#1f1f1f' }} />
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium" style={{ color: '#555555' }}>Estado</span>
+              <div className="flex gap-1">
+                {RESPONSE_STATUS_OPTIONS.map((opt) => {
+                  const color = opt.value ? RESPONSE_STATUS_COLORS[opt.value] : '#999999';
+                  return renderPill(opt.value, responseStatusFilter, opt.label, () => setResponseStatusFilter(opt.value), color);
+                })}
+              </div>
+            </div>
+
+            <div style={{ width: 1, height: 20, backgroundColor: '#1f1f1f' }} />
+
             <button
-              key={opt.value}
-              onClick={() => setStatusFilter(opt.value)}
-              className="text-sm rounded-lg transition-colors"
+              onClick={() => setFavoritedOnly((v) => !v)}
+              className="flex items-center gap-1.5 text-xs rounded-full transition-all"
               style={{
-                padding: '6px 14px',
-                backgroundColor: statusFilter === opt.value ? '#FFFF00' : '#1A1A1A',
-                color: statusFilter === opt.value ? '#0A0A0A' : '#999999',
+                padding: '4px 12px',
+                backgroundColor: favoritedOnly ? '#FFFF0020' : 'transparent',
+                color: favoritedOnly ? '#FFFF00' : '#555555',
                 border: '1px solid',
-                borderColor: statusFilter === opt.value ? '#FFFF00' : '#333333',
+                borderColor: favoritedOnly ? '#FFFF0044' : '#ffffff0a',
               }}
             >
-              {opt.label}
+              <span style={{ fontSize: 11 }}>★</span> Solo favoritos
             </button>
-          ))}
-        </div>
-
-        {/* AI + Estado + Favoritos Filters */}
-        <div className="flex flex-wrap items-center gap-4" style={{ marginBottom: 16 }}>
-          {/* Category */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">Categoría:</span>
-            <div className="flex gap-1">
-              {CATEGORY_OPTIONS.map((opt) =>
-                renderFilterButton(
-                  opt.value,
-                  categoryFilter,
-                  opt.label,
-                  () => setCategoryFilter(opt.value),
-                  opt.color,
-                  opt.color,
-                ),
-              )}
-            </div>
           </div>
-
-          {/* Importance */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">Importancia:</span>
-            <div className="flex gap-1">
-              {IMPORTANCE_OPTIONS.map((opt) =>
-                renderFilterButton(
-                  String(opt.value),
-                  String(importanceMin),
-                  opt.label,
-                  () => setImportanceMin(opt.value),
-                  '#FF4444',
-                  '#FF4444',
-                ),
-              )}
-            </div>
-          </div>
-
-          {/* Response Status */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-text-muted">Estado:</span>
-            <div className="flex gap-1">
-              {RESPONSE_STATUS_OPTIONS.map((opt) => {
-                const color = opt.value ? RESPONSE_STATUS_COLORS[opt.value] : '#999999';
-                return renderFilterButton(
-                  opt.value,
-                  responseStatusFilter,
-                  opt.label,
-                  () => setResponseStatusFilter(opt.value),
-                  color,
-                  color,
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Favorited toggle */}
-          <button
-            onClick={() => setFavoritedOnly((v) => !v)}
-            className="flex items-center gap-1 text-xs rounded-full transition-colors"
-            style={{
-              padding: '3px 10px',
-              backgroundColor: favoritedOnly ? '#FFFF0033' : 'transparent',
-              color: favoritedOnly ? '#FFFF00' : '#666666',
-              border: '1px solid',
-              borderColor: favoritedOnly ? '#FFFF0066' : '#33333366',
-            }}
-          >
-            <span style={{ fontSize: 12 }}>★</span> Solo favoritos
-          </button>
         </div>
 
         {/* Error */}
@@ -312,7 +303,7 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid #333333' }}>
+                <tr style={{ borderBottom: '1px solid #1f1f1f' }}>
                   <th
                     onClick={() => handleSort('is_favorited')}
                     style={{ width: 40, padding: '10px 6px', cursor: 'pointer', textAlign: 'center' }}
@@ -336,7 +327,7 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                   </th>
                   <th
                     onClick={() => handleSort('ai_importance')}
-                    style={{ width: 80, padding: '10px 8px', cursor: 'pointer', textAlign: 'center' }}
+                    style={{ width: 60, padding: '10px 8px', cursor: 'pointer', textAlign: 'center' }}
                   >
                     <span className="text-xs text-text-muted font-medium">Imp.</span>
                     {renderSortIndicator('ai_importance')}
@@ -347,6 +338,13 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                   >
                     <span className="text-xs text-text-muted font-medium">Sentimiento</span>
                     {renderSortIndicator('ai_sentiment')}
+                  </th>
+                  <th
+                    onClick={() => handleSort('status')}
+                    style={{ width: 70, padding: '10px 8px', cursor: 'pointer', textAlign: 'center' }}
+                  >
+                    <span className="text-xs text-text-muted font-medium">Ticket</span>
+                    {renderSortIndicator('status')}
                   </th>
                   <th
                     onClick={() => handleSort('response_status')}
@@ -372,6 +370,7 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                   const respColor = RESPONSE_STATUS_COLORS[c.response_status] || '#666';
                   const respLabel = RESPONSE_STATUS_LABELS[c.response_status] || c.response_status;
                   const isHighPriority = (c.ai_importance ?? 0) >= 4;
+                  const hasTicket = c.status === 'ticket_opened';
 
                   return (
                     <tr
@@ -379,10 +378,10 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                       onClick={() => onSelect(c)}
                       className="transition-colors"
                       style={{
-                        borderBottom: '1px solid #1f1f1f',
+                        borderBottom: '1px solid #151515',
                         cursor: 'pointer',
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#1A1A1A')}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#141414')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
                       {/* Favorite */}
@@ -394,7 +393,7 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                             border: 'none',
                             cursor: 'pointer',
                             fontSize: 16,
-                            color: c.is_favorited ? '#FFFF00' : '#444444',
+                            color: c.is_favorited ? '#FFFF00' : '#333333',
                             lineHeight: 1,
                           }}
                           title={c.is_favorited ? 'Quitar favorito' : 'Marcar favorito'}
@@ -405,22 +404,8 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
 
                       {/* User */}
                       <td style={{ padding: '10px 8px' }}>
-                        <div className="flex items-center gap-2" style={{ lineHeight: 1.3 }}>
-                          <span className="text-sm font-medium text-text-primary">
-                            {c.external_id}
-                          </span>
-                          {c.status === 'ticket_opened' && (
-                            <span
-                              className="text-xs font-medium rounded-full"
-                              style={{
-                                backgroundColor: '#FF994422',
-                                color: '#FF9944',
-                                padding: '1px 7px',
-                              }}
-                            >
-                              Ticket
-                            </span>
-                          )}
+                        <div className="text-sm font-medium text-text-primary" style={{ lineHeight: 1.3 }}>
+                          {c.external_id}
                         </div>
                         {c.email && (
                           <div className="text-xs text-text-muted" style={{ lineHeight: 1.3 }}>
@@ -435,7 +420,7 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                           <span
                             className="text-xs font-medium rounded-full"
                             style={{
-                              backgroundColor: `${catColor}22`,
+                              backgroundColor: `${catColor}18`,
                               color: catColor,
                               padding: '2px 8px',
                               display: 'inline-block',
@@ -455,8 +440,8 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                           <span
                             className="text-xs font-bold rounded-full"
                             style={{
-                              backgroundColor: isHighPriority ? '#FF444433' : '#33333366',
-                              color: isHighPriority ? '#FF4444' : '#999999',
+                              backgroundColor: isHighPriority ? '#FF444428' : '#ffffff08',
+                              color: isHighPriority ? '#FF4444' : '#777777',
                               padding: '2px 7px',
                               minWidth: 22,
                               textAlign: 'center',
@@ -484,12 +469,31 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
                         )}
                       </td>
 
+                      {/* Ticket */}
+                      <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                        {hasTicket ? (
+                          <span
+                            className="text-xs font-medium rounded-full"
+                            style={{
+                              backgroundColor: '#FF994420',
+                              color: '#FF9944',
+                              padding: '2px 8px',
+                              display: 'inline-block',
+                            }}
+                          >
+                            Si
+                          </span>
+                        ) : (
+                          <span className="text-xs" style={{ color: '#333333' }}>—</span>
+                        )}
+                      </td>
+
                       {/* Response Status */}
                       <td style={{ padding: '10px 8px', textAlign: 'center' }}>
                         <span
                           className="text-xs font-medium rounded-full"
                           style={{
-                            backgroundColor: `${respColor}22`,
+                            backgroundColor: `${respColor}18`,
                             color: respColor,
                             padding: '2px 10px',
                             display: 'inline-block',
