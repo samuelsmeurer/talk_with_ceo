@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { StatusBar } from './components/layout/StatusBar';
 import { ConversationThread } from './components/chat/ConversationThread';
 import { MessageInput } from './components/input/MessageInput';
+import { CooldownTimer } from './components/input/CooldownTimer';
 import { ConfettiEffect } from './components/confirmation/ConfettiEffect';
 import { SplashScreen } from './components/intro/SplashScreen';
 import { UsernamePopup } from './components/intro/UsernamePopup';
@@ -21,6 +22,7 @@ import type { Message } from './types';
 import type { ServerMessage } from './api/client';
 
 const CONVERSATION_STORAGE_KEY = 'ceo-chat-conversation-id';
+const COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const CEO_DISMISS_MESSAGE =
   '¡Listo! Ya lo recibí. Lo voy a leer personalmente. Gracias por tomarte el tiempo. Si tenés algún problema, podés escribirme de nuevo.';
@@ -44,7 +46,8 @@ export default function App() {
   const [serverMessages, setServerMessages] = useState<Message[]>([]);
   const [pollEnabled, setPollEnabled] = useState(false);
   const [isFollowUp, setIsFollowUp] = useState(false);
-  const [awaitingCeoReply, setAwaitingCeoReply] = useState(false);
+  const [lastUserMessageAt, setLastUserMessageAt] = useState<number | null>(null);
+  const [cooldownExpired, setCooldownExpired] = useState(false);
 
   const conversationIdRef = useRef('');
 
@@ -84,10 +87,14 @@ export default function App() {
         setChatStarted(true);
         setShowSplash(false);
         setPollEnabled(true);
-        // If last message is from user, they're awaiting a CEO reply
-        const lastMsg = mapped[mapped.length - 1];
-        if (lastMsg.sender === 'user') {
-          setAwaitingCeoReply(true);
+        // Derive cooldown from last user message timestamp
+        const lastUserMsg = [...mapped].reverse().find((m) => m.sender === 'user');
+        if (lastUserMsg?.timestamp) {
+          const ts = new Date(lastUserMsg.timestamp).getTime();
+          setLastUserMessageAt(ts);
+          if (ts + COOLDOWN_MS <= Date.now()) {
+            setCooldownExpired(true);
+          }
         }
       }
     }).catch(() => {
@@ -158,8 +165,6 @@ export default function App() {
     });
     if (newBubbles.length > 0) {
       playReceived();
-      // CEO replied — unlock the input so user can respond
-      setAwaitingCeoReply(false);
     }
   }, []);
 
@@ -223,8 +228,9 @@ export default function App() {
         setPostSendMessages((prev) => [...prev, userMessage]);
       }
       playSent();
-      // Lock input until CEO replies from admin
-      setAwaitingCeoReply(true);
+      // Start 24h cooldown
+      setLastUserMessageAt(Date.now());
+      setCooldownExpired(false);
 
       try {
         if (conversationIdRef.current) {
@@ -240,6 +246,8 @@ export default function App() {
     addMessage(userMessage);
     playSent();
     setSent(true);
+    setLastUserMessageAt(Date.now());
+    setCooldownExpired(false);
 
     let ceoResponseText = CEO_CONFIRMATION_MESSAGE;
     let isComplaint = false;
@@ -382,7 +390,6 @@ export default function App() {
         setShowConfetti(false);
         setPollEnabled(true);
         setIsFollowUp(true);
-        setAwaitingCeoReply(true);
       }, 2000);
     },
     []
@@ -395,8 +402,15 @@ export default function App() {
       setShowConfetti(false);
       setPollEnabled(true);
       setIsFollowUp(true);
-      setAwaitingCeoReply(true);
     }, 2000);
+  }, []);
+
+  // 24h cooldown logic
+  const cooldownEnd = lastUserMessageAt ? lastUserMessageAt + COOLDOWN_MS : 0;
+  const isCooldownActive = lastUserMessageAt !== null && !cooldownExpired && cooldownEnd > Date.now();
+
+  const handleCooldownExpired = useCallback(() => {
+    setCooldownExpired(true);
   }, []);
 
   return (
@@ -433,8 +447,16 @@ export default function App() {
           serverMessages={isReturningUser ? serverMessages : undefined}
         />
 
-        {((!sent && sequenceComplete) || (isFollowUp && !awaitingCeoReply && !showRating && !showConfirmation && !showSupportConfirmation && !showConfetti)) && (
+        {/* First message — show input after greeting sequence */}
+        {!sent && sequenceComplete && (
           <MessageInput onSend={handleSend} />
+        )}
+
+        {/* Follow-up — show cooldown timer or input */}
+        {isFollowUp && !showRating && !showConfirmation && !showSupportConfirmation && !showConfetti && (
+          isCooldownActive
+            ? <CooldownTimer cooldownEnd={cooldownEnd} onExpired={handleCooldownExpired} />
+            : <MessageInput onSend={handleSend} />
         )}
 
         {/* Support confirmation inline (complaint flow) */}
