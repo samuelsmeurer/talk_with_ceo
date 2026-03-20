@@ -35,7 +35,7 @@ export async function sendSupportTicket(
   try {
     await sendEmail({
       from: config.emailFrom,
-      to: 'soporte@eldorado.io',
+      to: 's.schramm@eldorado.io',
       subject: `[Habla con Guille] Ticket de soporte - ${username}`,
       text: [
         `Nuevo ticket desde el miniapp "Habla con Guille"`,

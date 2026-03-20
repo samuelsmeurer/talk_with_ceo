@@ -360,6 +360,7 @@ export default function App() {
         setShowConfetti(false);
         setPollEnabled(true);
         setIsFollowUp(true);
+        setAwaitingCeoReply(true);
       }, 2000);
     },
     []
@@ -372,6 +373,7 @@ export default function App() {
       setShowConfetti(false);
       setPollEnabled(true);
       setIsFollowUp(true);
+      setAwaitingCeoReply(true);
     }, 2000);
   }, []);
 

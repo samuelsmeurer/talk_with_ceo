@@ -405,8 +405,22 @@ export function AdminDashboard({ onSelect, onLogout }: AdminDashboardProps) {
 
                       {/* User */}
                       <td style={{ padding: '10px 8px' }}>
-                        <div className="text-sm font-medium text-text-primary" style={{ lineHeight: 1.3 }}>
-                          {c.external_id}
+                        <div className="flex items-center gap-2" style={{ lineHeight: 1.3 }}>
+                          <span className="text-sm font-medium text-text-primary">
+                            {c.external_id}
+                          </span>
+                          {c.status === 'ticket_opened' && (
+                            <span
+                              className="text-xs font-medium rounded-full"
+                              style={{
+                                backgroundColor: '#FF994422',
+                                color: '#FF9944',
+                                padding: '1px 7px',
+                              }}
+                            >
+                              Ticket
+                            </span>
+                          )}
                         </div>
                         {c.email && (
                           <div className="text-xs text-text-muted" style={{ lineHeight: 1.3 }}>
